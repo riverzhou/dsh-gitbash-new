@@ -1,0 +1,9 @@
+# dsh bundle patch: install this plugin into the profile tree.
+#
+# The platform gate is the same shape the official bash-sandbox / tool-pwsh rows
+# use: off Windows, the host half never applies and the client bundle never
+# enters the startup graph.
+- insert:
+    - id: dsh-gitbash
+      name: dsh-gitbash
+      disabled: !!js process.platform !== 'win32'

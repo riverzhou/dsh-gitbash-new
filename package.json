@@ -1,0 +1,63 @@
+{
+  "name": "dsh-gitbash",
+  "description": "Windows Git Bash / MSYS2 terminal tool for DeepSeek Harness (DSH), replacing pwsh with a selectable bash profile",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/converk/dsh-gitbash-new.git"
+  },
+  "engines": {
+    "node": ">=22",
+    "dsh": ">=0.2.1-0"
+  },
+  "main": "lib/index.js",
+  "types": "src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "types": "./src/client/index.ts",
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "src",
+    "cordis.patch.yml",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "docs"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "check": "tsc --noEmit",
+    "test": "node --test tests/*.test.mjs",
+    "selftest": "node scripts/selftest.mjs",
+    "prepack": "npm run build",
+    "compatcheck": "node scripts/compatcheck.mjs"
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "~3.18.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/react": "~18.3.1",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.6.0"
+  }
+}

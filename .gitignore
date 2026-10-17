@@ -1,0 +1,9 @@
+# Build output is intentionally NOT ignored: `dsh plugin add link:...` and a
+# git-installed plugin need lib/index.js + lib/client.js present.
+node_modules/
+.pnpm-store/
+*.log
+dsh-gitbash.log
+.compat-cache/
+coverage/
+.tmp/
