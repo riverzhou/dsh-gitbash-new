@@ -15,7 +15,7 @@
 | 文件 | 插件源码 + 构建产物 `lib/` + 文档/测试/脚本（见 §3） |
 | 源码 / 技术栈 | TypeScript（host ESM + client bundle）+ esbuild；`lib/` 已构建并入库 |
 | 项目定位 | ✅ **已确定并实现**（见 §1；设计见 `docs/DESIGN.md`） |
-| 验证 | `pnpm test` 55/55；`pnpm selftest` 10/10；`pnpm compatcheck` 通过；真机 DSH 0.2.1-rc.2 冒烟通过（`docs/SMOKE.md`） |
+| 验证 | `pnpm test` 59/59；`pnpm selftest` 10/10；`pnpm compatcheck` 通过；真机 DSH 0.2.1-rc.2 冒烟通过（`docs/SMOKE.md`） |
 | 平台 | Windows 10（19045）/ Git for Windows 2.56（bash 5.3.15）/ MSYS2 5.3.20（UCRT64） |
 | 运行时 | Node v24.21.0；DSH 桌面运行时 `0.2.1-rc.2` |
 | 已知硬约束 | Git Bash/MSYS2 无法在 DSH Windows ACL 沙箱内启动；兼容模式策略见 §1 与 README |
@@ -114,7 +114,7 @@ dsh-gitbash-new/
 │       └── types.ts       # 客户端契约窄化
 ├── tests/
 │   ├── helpers/           # fake / real subprocess
-│   └── *.test.mjs         # 55 个 node:test 用例（含真实 Git/MSYS2 集成）
+│   └── *.test.mjs         # 59 个 node:test 用例（含真实 Git/MSYS2 集成）
 ├── scripts/
 │   ├── selftest.mjs       # 纯逻辑自测
 │   └── compatcheck.mjs    # 对 app.asar 里的官方产物做契约字符串核对

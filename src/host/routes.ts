@@ -71,7 +71,7 @@ export function registerRoutes(ctx: HostContextLike, deps: RouteDeps): void {
             }
           },
         })
-        target.effect?.(() => () => { void dispose }, `dsh-gitbash: route ${path}`)
+        target.effect?.(() => () => { if (typeof dispose === 'function') void dispose() }, `dsh-gitbash: route ${path}`)
         diag(`routes: registered ${path}`)
       } catch (error) {
         diag(`routes: register ${path} failed: ${messageOf(error)}`)
