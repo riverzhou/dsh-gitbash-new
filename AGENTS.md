@@ -1,7 +1,7 @@
 # AGENTS.md — dsh-gitbash-new 代理工作规范
 
 > **本文件是 AI 代理进入本仓库的唯一指令入口。** 动手前先读完全文。
-> 当前仓库处于「项目已定义、源码待建」阶段：项目目标见 §1，源码与目录将按设计文档逐步落地。
+> 当前仓库处于「已实现、可安装、真机验证通过」阶段：项目目标见 §1，契约与坑见 §6。
 > 维护原则：**每条规则都要有可机械检验的判据**；写不出判据的，不要写进来。
 
 ---
@@ -12,11 +12,16 @@
 |---|---|
 | 仓库路径 | `D:\GitHub\dsh-gitbash-new` |
 | Git | 分支 `master`；`user.name=River Zhou`，`core.autocrlf=true` |
-| 文件 | 本文件（项目定义已补齐到 §1） |
-| 源码 / 技术栈 | 待建 / TypeScript（host + client）+ esbuild，计划见 §1 |
-| 项目定位 | ✅ **已确定**（见 §1） |
-| 平台 | Windows 10（19045）/ Git Bash（MINGW64，GNU bash 5.3.15） |
+| 文件 | 插件源码 + 构建产物 `lib/` + 文档/测试/脚本（见 §3） |
+| 源码 / 技术栈 | TypeScript（host ESM + client bundle）+ esbuild；`lib/` 已构建并入库 |
+| 项目定位 | ✅ **已确定并实现**（见 §1；设计见 `docs/DESIGN.md`） |
+| 验证 | `pnpm test` 55/55；`pnpm selftest` 10/10；`pnpm compatcheck` 通过；真机 DSH 0.2.1-rc.2 冒烟通过（`docs/SMOKE.md`） |
+| 平台 | Windows 10（19045）/ Git for Windows 2.56（bash 5.3.15）/ MSYS2 5.3.20（UCRT64） |
 | 运行时 | Node v24.21.0；DSH 桌面运行时 `0.2.1-rc.2` |
+| 已知硬约束 | Git Bash/MSYS2 无法在 DSH Windows ACL 沙箱内启动；兼容模式策略见 §1 与 README |
+
+**构建/测试命令**：`pnpm install` → `pnpm build` → `pnpm check` → `pnpm test` → `pnpm selftest` → `pnpm compatcheck`。
+`src/` 改动后必须重新 `pnpm build`；`lib/` 是 `dsh plugin add link:` 实际加载的产物。
 
 **仓库名与项目目标一致。** `dsh-gitbash-new` 是「DSH 的 Git Bash 支持」的新仓库；相邻仓库（如 `D:\GitHub\dsh-tweaks`、`D:\GitHub\dsh-searxng`）只能作为调研参考，**不得整段复制**当作本仓库的设计。
 
@@ -35,14 +40,15 @@
 
 | 项 | 内容 |
 |---|---|
-| 一句话目标 | 在 Windows 上给 DSH 一个**完整可用的 Git Bash 终端环境**：用 bash 取代默认 pwsh，同时保留 DSH 官方终端工具的全部行为（cwd / 后台任务 / 超时转后台 / 沙箱与提权 / 终端卡片 / PTC）。 |
-| 交付物 | 一个可安装的 DSH 双面插件：host 半区（Git Bash 发现与校验、bash 工具、沙箱兼容、设置路由）+ client 半区（设置页、自动发现、状态与诊断）；配套测试、README、CHANGELOG。 |
+| 一句话目标 | 在 Windows 上给 DSH 一个**完整可用的 bash 终端环境**：用 **Git for Windows 或 MSYS2**（可选）取代默认 pwsh，同时保留 DSH 官方终端工具的全部行为（cwd / 后台任务 / 超时转后台 / 沙箱与提权 / 终端卡片 / PTC）。 |
+| 交付物 | 一个可安装的 DSH 双面插件：host 半区（Git/MSYS2 profile 发现与校验、bash 工具、沙箱兼容、设置路由）+ client 半区（设置页、自动发现、MSYS2 环境选择、状态与诊断）；配套测试、README、CHANGELOG、设计/冒烟文档。 |
 | 明确不做的事 | 不改 DSH 源码/安装文件；不自动选 WSL 的 bash；不引入自定义 preset；不接管 `ctx.shell`（pwsh 保留）；Linux/macOS 上不注册任何行为。 |
 | 技术栈 | TypeScript（host ESM + client bundle）、esbuild、官方 `ctx` 服务契约（结构性窄化，不 import 官方包）；Node ≥ 22.19。 |
 | 最低 DSH | **0.2.1**（以 0.2.1-rc.2 的源码与桌面运行时为基线；用特性探测兼容 0.2.x）。 |
-| 「怎么算做完」 | ① 在 Windows + workspace-write 模式下，新会话的模型工具目录里**只有 `bash`、没有 `pwsh`**，且 bash 命令能真实执行；② 工作区外写文件被沙箱拒绝，工作区内写入成功；③ `workdir` / 后台任务 / 超时转后台 / 沙箱提权 / 终端卡片与官方 tool-bash 逐项对齐；④ 设置页能自动发现、校验、持久化 Git Bash 路径；⑤ 单元/集成测试与真机冒烟全绿；⑥ 安装/卸载/升级路径有文档。 |
+| 「怎么算做完」 | ① 新会话的模型工具目录里**只有 `bash`、没有 `pwsh`**，且 bash 命令能真实执行（真机已验证）；② **安全决策如实落地**：`workspace-write` 下 bash 以完全访问运行并在结果/设置页显式标注，`read-only` 拒绝，文件工具仍受官方沙箱（真机已验证 workspace-write；read-only/strict 由单元测试覆盖）；③ `workdir` / 后台任务 / 超时转后台 / 沙箱提权 / 终端卡片与官方 tool-bash 逐项对齐（单测 + 真机 tool call/meta.cwd）；④ 设置页能自动发现、校验、持久化 **Git 与 MSYS2** profile；⑤ 单元/集成测试与真机冒烟全绿；⑥ 安装/卸载/升级路径有文档。 |
 
 > **验收口径**：上面的 ①~⑥ 每条都要有可复现的检验步骤；无法检验的条目不算完成。
+> **安全决策（所有者 2026-10-18 拍板：体验优先）**：Git Bash/MSYS2 在 OS 层无法与 DSH 的 Windows ACL 沙箱共存；`compat: auto` 下 `workspace-write` 会话的 bash 以完全访问运行（结果带 `[compat: ...]`），`read-only` 拒绝，`compat: strict` 仅允许 `danger-full-access`。不得静默降级。
 
 **设计约束（所有者原话）**：尽量复用 DSH 官方机制、方便跟进官方升级；参考 `dsh-tweaks` 但**完全重头设计**；用户体验优先：功能强、配置简单、安全可靠。
 
@@ -70,24 +76,70 @@
 
 ## 3. 目录约定
 
-当前（2026-10-18）：
+当前（2026-10-18，已实现）：
 
 ```text
 dsh-gitbash-new/
-└── AGENTS.md        # 本文件：代理指令入口
+├── AGENTS.md              # 本文件：代理指令入口
+├── README.md              # 人类入口：功能 / 安装 / 安全边界 / 排障
+├── CHANGELOG.md           # 版本留痕
+├── LICENSE                # MIT
+├── package.json           # 包名 dsh-gitbash；dsh.bundle / dsh.client / engines.dsh
+├── pnpm-workspace.yaml    # pnpm 11 的 allowBuilds（esbuild）
+├── tsconfig.json          # strict + allowImportingTsExtensions + react-jsx
+├── build.mjs              # host ESM + client classic CJS wrapper + sourcemap
+├── cordis.patch.yml       # bundle patch：仅 win32 挂载
+├── src/
+│   ├── index.ts           # host 入口：apply / Config / 路由 / 替换 / 纯逻辑导出
+│   ├── shared/protocol.ts # host/client 共用 wire 常量与类型
+│   ├── host/
+│   │   ├── types.ts       # DSH 0.2.1 契约的结构性窄化（不 import 官方包）
+│   │   ├── settings.ts    # schemastery Config（volatile）
+│   │   ├── discover.ts    # Git/MSYS2/Cygwin profile 发现、WSL 排除、校验
+│   │   ├── env.ts         # MSYSTEM/PATH 隔离、POSIX↔Windows、workdir
+│   │   ├── escalation.ts  # 官方提权语义的本地窄化实现
+│   │   ├── executor.ts    # ctx.subprocess 封装：deadline/collect/启动失败检测
+│   │   ├── jobs.ts        # job sources / outcomes / cancel
+│   │   ├── render.ts      # 结果文本、标记、截断、compat note
+│   │   ├── bash-tool.ts   # 工具定义（JSON Schema 参数/输出、execute、presenter）
+│   │   ├── replace.ts     # agent/created：restrict + register + prompt shadow
+│   │   ├── routes.ts      # /api/dsh-gitbash/{state,discover,validate}
+│   │   └── diag.ts        # %TEMP%\dsh-gitbash.log
+│   └── client/
+│       ├── index.ts       # settings.general.item 注册 + configForms 解析
+│       ├── row.tsx        # 设置行 UI
+│       ├── store.ts       # config form + /api 状态
+│       ├── api.ts         # 同源 fetch
+│       ├── locales.ts     # zh/en
+│       └── types.ts       # 客户端契约窄化
+├── tests/
+│   ├── helpers/           # fake / real subprocess
+│   └── *.test.mjs         # 55 个 node:test 用例（含真实 Git/MSYS2 集成）
+├── scripts/
+│   ├── selftest.mjs       # 纯逻辑自测
+│   └── compatcheck.mjs    # 对 app.asar 里的官方产物做契约字符串核对
+├── docs/
+│   ├── README.md          # 文档索引
+│   ├── DESIGN.md          # 设计定稿
+│   └── SMOKE.md           # 真机冒烟记录
+└── lib/                   # 构建产物（入库；`dsh plugin add link:` 直接加载）
+    ├── index.js
+    └── client.js
 ```
 
 - 新增顶层目录或文件时，**必须同时更新本节**。
-- 设计文档与源码落地后，本节必须与真实目录一致；不一致即为缺陷。
+- `src/` 与 `lib/` 必须同步：改了 `src/` 就要 `pnpm build`，否则实际加载的仍是旧产物。
+- `lib/` 入库是有意的：`link:` 安装与 git 安装都直接读取它；`prepack` 也会重建。
 
 ---
 
 ## 4. 文档纪律
 
-- 当前**唯一**文档是本文件。引入 `README.md` 之后：
-  `README.md` 面向人类（项目是什么、怎么跑），`AGENTS.md` 面向代理（怎么做、坑在哪），二者内容不重复。
+- 根目录：`README.md` 面向人类（功能/安装/安全/排障），`AGENTS.md` 面向代理（规则/契约/坑），`CHANGELOG.md` 记版本；三者分工不重复。
+- `docs/README.md` 是 **docs 目录的唯一索引**；`docs/DESIGN.md` 是契约与设计的单一事实来源，`docs/SMOKE.md` 是真机证据。
 - 文档与代码**同一次提交**，不分开。
-- ⛔ **禁止「影子文档」**：任何存在但未登记的文档，视为不存在。
+- 契约变更必须同时改 `docs/DESIGN.md` 与 `AGENTS.md` §6（如涉及）。
+- ⛔ **禁止「影子文档」**：`docs/` 下任何存在但未在 `docs/README.md` 登记的文档，视为不存在。
 
 ---
 
@@ -95,12 +147,43 @@ dsh-gitbash-new/
 
 每个新会话开始：
 
-- [ ] 读 §0 与 §1；§1 仍为空 → **先问所有者，不要猜**。
+- [ ] 读 §0、§1、§6；`docs/DESIGN.md` 的 §2/§4 是安全与契约的最终依据。
 - [ ] `git log --oneline -5` 与 `git status` 核对仓库真实状态（不要相信文档里的旧状态）。
+- [ ] `pnpm test` 是否仍全绿；若失败，先修回归，再动新功能。
 - [ ] 若 §0 的环境事实与会话实际不符，先更正 §0，再动手。
 
 每次提交前：
 
-- [ ] `git status` / `git show --stat` 逐行核对。
-- [ ] 项目定位若已确定：填写 §1、删掉「待填写」、同步 §3；仍不确定则保持原样。
+- [ ] `pnpm check`、`pnpm test`、`pnpm selftest`、`pnpm compatcheck` 全过（无 DSH 安装时 compatcheck 可 skip，但要说明）。
+- [ ] `git status` / `git show --stat` 逐行核对；`lib/` 与 `src/` 同步。
+- [ ] 文档（README/CHANGELOG/DESIGN/AGENTS 按影响面）与代码同提交。
 - [ ] 提交信息用 `-F`，写清「改了什么 / 为什么 / 影响面 / 未完成」。
+
+---
+
+## 6. 实现契约与坑（真机验证）
+
+1. **替换挂载点**：`agent/created`（serial + awaited）。在 `agent.ctx` 里
+   `tools.restrict({ deny: ['pwsh'] })` → `tools.register(bashTool)` →
+   `systemPrompt.section({ name:'tool:pwsh', text:'' })` → `tool:bash` / `tool:bash:windows`。
+   事件名写错不会报错、只是不触发。
+2. **工具 schema**：`parameters` 与 `output.schema` 都是**标准 JSON Schema**
+   （`required` 是对象节点上的数组）。不能用 `defineTool` 的叶子 `required: true` DSL——
+   真机曾报 `Invalid schema for function 'bash'`。
+3. **终端卡片**：Web UI 不消费 `presentCall/presentResult`；它从工具名 `bash`、参数、
+   结果文本标记、`tool/result.meta.cwd` 反推。`presentationMeta` 必须返回 `{ cwd }`。
+4. **结果标记**：`[exit code: N]` / `[killed by signal: X]` 必须是最后一行；
+   `[stderr]` 段头；截断提示带 spill 路径；compat 提示在标记之前，用
+   `[compat: Git Bash runs outside the DSH file sandbox (session mode …)]`。
+5. **沙箱硬约束**：MSYS2 在 WRITE_RESTRICTED / Low 令牌下起不来；不要试图用
+   `ctx.sandbox.confine` 包 bash，也不要偷偷放宽令牌。当前策略见 §1。
+6. **PATH 隔离**：Git 与 MSYS2 的 `usr\bin` 不能互混；`composePath` 会按
+   foreignRoots + 同根 sibling env 过滤。`MSYSTEM` 必须与 profile 匹配。
+7. **启动失败检测**：`bash.exe` 可能以 exit 0 结束且无输出（MSYS2 fatal）；
+   检测 `*** fatal error -` / `couldn't create signal pipe` 并改判失败。
+8. **升级**：DSH 升级后跑 `pnpm compatcheck`；裸字符串（事件名、标记、meta.cwd、
+   `tool:bash`）在测试里断言，避免“裸字符串等于没测”。
+9. **设置**：entry Config + `.volatile()`；namespace = entry id `dsh-gitbash`；
+   `configForms.get(entryId)`；不要再读 0.2.1 已删除的 `snapshot.mode`。
+10. **JS/TS**：host 是 Node ESM、client 是经典 CJS 工厂；client 只允许 require
+    react / react/jsx-runtime 等页面种子模块；client 入口必须声明 `inject`。
