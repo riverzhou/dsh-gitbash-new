@@ -61,8 +61,8 @@ test('Git for Windows root produces one MINGW64 profile', t => {
   assert.equal(profiles[0].msystem, 'MINGW64')
   assert.equal(profiles[0].valid, true)
   assert.equal(profiles[0].path, join(root, 'usr', 'bin', 'bash.exe'))
-  // A user-provided binash.exe is a launcher that resets MSYSTEM; it must
-  // normalize to the usrin runtime.
+  // A user-provided bin\bash.exe is a launcher that resets MSYSTEM; it must
+  // normalize to the usr\bin runtime.
   const fromBin = profileFromPath(join(root, 'bin', 'bash.exe'), 'auto')
   assert.equal(fromBin.profile?.path, join(root, 'usr', 'bin', 'bash.exe'))
 })
