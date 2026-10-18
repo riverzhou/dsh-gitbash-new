@@ -36,7 +36,7 @@ Git Bash / MSYS2 的运行时（MSYS2）**无法在 DSH 官方的 Windows ACL �
 先完全退出 DSH Desktop，再使用 **Desktop 自带 CLI**（`0.2.1`；不是 npm 全局的 `0.1.7`）：
 
 ```bat
-set "DSH_CLI=%LOCALAPPDATA%\Programs\DeepSeek Harnessesourcesuntime\cliin\dsh.cmd"
+set "DSH_CLI=%LOCALAPPDATA%\Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd"
 %DSH_CLI% --version
 :: 应为 0.2.1-rc.2 或更高；0.1.7 的全局 dsh 不能安装本插件
 
