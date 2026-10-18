@@ -233,6 +233,34 @@ BG_BEFORE
 ```
 
 - 直连/后台/子智能体均保持 `MSYSTEM=UCRT64`；`workspace-write` 的 compat 尾注仍在。
-- `pnpm test` 74/74（新增真实 Git Bash 信号、宿主 Windows `PWD` 回归）。
+- `pnpm test` 75/75（新增真实 Git Bash 信号、宿主 Windows `PWD`、客户端主题 token 回归）。
 - 未覆盖：`SIGQUIT`（`kill -QUIT $$` 在 Git Bash 下正常退出 0，不构成信号编码样本）；
   read-only/strict 的实机拒绝仍由既有单测覆盖。
+
+---
+
+## 追加：设置页浅色/深色（2026-10-18 09:3x）
+
+同一测试 profile，用真实 Chromium 打开 **设置 → 通用 → 终端工具（Git Bash / MSYS2）**，
+点击 Shell 下拉截图；再点 **外观 → 深色/浅色** 重复。
+
+修复前（深色）：原生弹层是白底，文字继承主题白色 → 除选中项外全部白底白字；
+闭控件也是透明背景。修复后三个 `<select>`（Shell / 兼容 / MSYS2 环境）的闭控件、
+每个 `<option>`、展开弹层均跟随主题：
+
+| 主题 | 闭控件 / option 背景 | 文字 | 边框 |
+|---|---|---|---|
+| 深色 | `rgb(44, 44, 46)` | `rgb(249, 250, 251)` | `rgba(255,255,255,0.12)` |
+| 浅色 | `rgb(255, 255, 255)` | `rgb(15, 17, 21)` | `rgba(0,0,0,0.10)` |
+
+真实点击截图：
+
+![深色主题：Shell 下拉](images/settings-dropdown-dark.png)
+![浅色主题：Shell 下拉](images/settings-dropdown-light.png)
+
+- 闭控件与弹层都由 `--dsw-alias-bg-layer-2` / `--dsw-alias-brand-text` /
+  `--dsw-alias-border-l2` 驱动（fallback `Canvas` / `CanvasText`），不是写死颜色；
+  `html[style="color-scheme: dark|light"]` 切换时自动跟随。
+- 高级与诊断展开后，手动路径输入框、MSYS2 环境下拉、按钮与状态表在两种主题下
+  都逐项截图检查；输入框使用 `--dsw-alias-bg-layer-1`。
+- 未覆盖：Windows 高对比度模式、第三方主题插件；这两种情况仍走 fallback 系统色。

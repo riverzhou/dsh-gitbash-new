@@ -103,7 +103,7 @@ set "DSH_CLI=%LOCALAPPDATA%\Programs\DeepSeek Harness\resources\runtime\cli\bin\
 ### 从 npm 安装（已发布）
 
 ```bat
-%DSH_CLI% plugin --profile desktop add @riverzh/dsh-gitbash@0.2.1
+%DSH_CLI% plugin --profile desktop add @riverzh/dsh-gitbash@0.2.2
 ```
 
 最新版可用 `@riverzh/dsh-gitbash@latest`。
@@ -153,6 +153,12 @@ set "DSH_CLI=%LOCALAPPDATA%\Programs\DeepSeek Harness\resources\runtime\cli\bin\
 设置页长这样：
 
 ![设置页：终端工具](docs/images/settings-row.png)
+
+Shell、兼容模式和 MSYS2 环境下拉都跟随 DSH 的浅色/深色 surface token，闭控件和
+展开列表都保持可读：
+
+![深色主题下的 Shell 下拉](docs/images/settings-dropdown-dark.png)
+![浅色主题下的 Shell 下拉](docs/images/settings-dropdown-light.png)
 
 ---
 

@@ -329,6 +329,10 @@ interface BashProfile {
 - Shell 选择按 `path + msystem` 匹配当前配置；Git 的 `bin\bash.exe` 已归一化到
   `usr\bin\bash.exe`，避免 launcher 重置 `MSYSTEM`。
 - 所有控件在 `configForms` 不可写时禁用并显示原因；不阻塞设置页打开。
+- 三个原生 `<select>` 的闭控件与每个 `<option>` 都显式使用
+  `--dsw-alias-bg-layer-2` / `--dsw-alias-brand-text` / `--dsw-alias-border-l2`
+  （fallback `Canvas` / `CanvasText`）。Windows 原生弹层不继承透明背景，否则
+  深色主题会出现白底白字；浅色/深色真机截图见 `docs/SMOKE.md`。
 - `/state` 在配置路径无效时返回 `problem`，row 在壳选择下方直接显示，不再只显示“noPath”。
 - 路径 + `msystem` 通过一次 `configForms.mutate` 原子写入，避免中间态。
 - 真机 UI 已验证：Shell 下拉切 Git → `/state` 读回 `git|...|MINGW64`；切回 MSYS2
@@ -379,7 +383,7 @@ interface BashProfile {
 
 ## 9. 打包与安装
 
-- npm 包名：`@riverzh/dsh-gitbash`（DSH entry id 仍是 `dsh-gitbash`）；`0.1.0` 是内部实现基线，`0.2.0` 是首个公开发布版本，`0.2.1` 为审计修复版；License 为 `GPL-3.0-only`。
+- npm 包名：`@riverzh/dsh-gitbash`（DSH entry id 仍是 `dsh-gitbash`）；`0.1.0` 是内部实现基线，`0.2.0` 是首个公开发布版本，`0.2.1` 为审计修复版，`0.2.2` 修复 Windows 信号/`PWD` 与设置页浅深色；License 为 `GPL-3.0-only`。
 - `package.json`：
   - `"type":"module"`，`main: "lib/index.js"`，`exports: { ".": ..., "./client": ... }`。
   - `"dsh": { "bundle": { "patch": "./cordis.patch.yml" }, "client": { "platform": "web" } }`。

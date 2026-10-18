@@ -3,10 +3,16 @@
 All notable changes to this project are documented here. One version per
 entry; the Git history is the evidence.
 
-## Unreleased
+## 0.2.2 — 2026-10-18
 
 ### Fixed
 
+- **Settings dropdown contrast**: the native Shell, Compatibility and
+  MSYS2-environment `<select>` popups rendered a white list with the dark
+  theme's white text (white-on-white). The row now paints both the control and
+  every `<option>` with DSH surface/text/border tokens, falling back to
+  `Canvas`/`CanvasText`; the closed control and the open list are verified in
+  both light and dark themes.
 - **Windows signal exits**: MSYS2/Git Bash encode death-by-signal as
   `signalNumber << 8` in the Windows exit code (`kill -TERM $$` → 3840,
   `kill -KILL $$` → 2304), while Node reports `signal: null` on Windows. The
@@ -20,8 +26,14 @@ entry; the Git history is the evidence.
   Windows-form `$PWD`, so `pwd` returned `D:/...` in an MSYS2 session. The
   composed child environment now carries explicit `undefined` tombstones for
   both variables; bash derives the POSIX path from the real cwd.
-- Tests: 74 (up from 69), including a real Git Bash signal regression, a
-  Windows-PWD/`$PWD` regression, and fake-provider normalization cases.
+- Tests: 75 (up from 69), including a real Git Bash signal regression, a
+  Windows-PWD/`$PWD` regression, fake-provider normalization cases, and a
+  client-bundle theme-token guard.
+
+### Changed
+
+- Version `0.2.2`; README/README.zh install pins, settings screenshots for both
+  themes, and `docs/SMOKE.md` evidence.
 
 ## 0.2.1 — 2026-10-18
 

@@ -15,8 +15,8 @@
 | 文件 | 插件源码 + 构建产物 `lib/` + 文档/测试/脚本（见 §3） |
 | 源码 / 技术栈 | TypeScript（host ESM + client bundle）+ esbuild；`lib/` 已构建并入库 |
 | 项目定位 | ✅ **已确定并实现**（见 §1；设计见 `docs/DESIGN.md`） |
-| 版本 / 许可 | `0.2.1` / `GPL-3.0-only` |
-| 验证 | `pnpm test` 74/74；`pnpm selftest` 10/10；`pnpm compatcheck` 通过；DSH 0.2.1-rc.2 真机：Git + MSYS2 的 direct/background/subagent、UI 卡片与设置切换均通过；Windows 信号与 `PWD` 回归真机通过（`docs/SMOKE.md`） |
+| 版本 / 许可 | `0.2.2` / `GPL-3.0-only` |
+| 验证 | `pnpm test` 75/75；`pnpm selftest` 10/10；`pnpm compatcheck` 通过；DSH 0.2.1-rc.2 真机：Git + MSYS2 的 direct/background/subagent、UI 卡片与设置切换均通过；Windows 信号与 `PWD` 回归、设置页浅色/深色下拉均通过（`docs/SMOKE.md`） |
 | 平台 | Windows 10（19045）/ Git for Windows 2.56（bash 5.3.15）/ MSYS2 5.3.20（UCRT64） |
 | 运行时 | Node v24.21.0；DSH 桌面运行时 `0.2.1-rc.2` |
 | 已知硬约束 | Git Bash/MSYS2 无法在 DSH Windows ACL 沙箱内启动；兼容模式策略见 §1 与 README |
@@ -116,7 +116,7 @@ dsh-gitbash-new/
 │       └── types.ts       # 客户端契约窄化
 ├── tests/
 │   ├── helpers/           # fake / real subprocess
-│   └── *.test.mjs         # 74 个 node:test 用例（含真实 Git/MSYS2 集成）
+│   └── *.test.mjs         # 75 个 node:test 用例（含真实 Git/MSYS2 集成）
 ├── scripts/
 │   ├── selftest.mjs       # 纯逻辑自测
 │   └── compatcheck.mjs    # 对 app.asar 里的官方产物做契约字符串核对
@@ -201,3 +201,7 @@ dsh-gitbash-new/
 13. **`PWD` 继承**：宿主可能导出 Windows `PWD`，bash 会信任它并让 `$PWD`/`pwd`
     变成 `D:/...`。`composeEnv` 必须用 `PWD: undefined` / `OLDPWD: undefined`
     tombstone 删除继承值；真机 MSYS2 会话曾出现 `PWD=D:/GitHub/...`。
+14. **原生 select 主题**：Windows 原生弹层不继承透明背景；`select` 与每个
+    `<option>` 必须同时用 `--dsw-alias-bg-layer-2` / `--dsw-alias-brand-text`
+    上色（fallback `Canvas`/`CanvasText`），否则深色主题会白底白字。浅色/深色
+    真机截图见 `docs/SMOKE.md`。

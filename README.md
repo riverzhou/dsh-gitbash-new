@@ -109,7 +109,7 @@ Reopen DSH, then hard-refresh the Web UI (`Ctrl+Shift+R`).
 ### From npm (published)
 
 ```bat
-%DSH_CLI% plugin --profile desktop add @riverzh/dsh-gitbash@0.2.1
+%DSH_CLI% plugin --profile desktop add @riverzh/dsh-gitbash@0.2.2
 ```
 
 Use `@riverzh/dsh-gitbash@latest` for the newest release.
@@ -166,6 +166,12 @@ skips because `pwsh` is no longer restrictable. The log contains
 The settings row looks like this:
 
 ![Settings row: terminal tool](docs/images/settings-row.png)
+
+The Shell, Compatibility and MSYS2-environment dropdowns use the DSH light/dark
+surface tokens, so both the closed control and the open list stay readable:
+
+![Shell dropdown in dark theme](docs/images/settings-dropdown-dark.png)
+![Shell dropdown in light theme](docs/images/settings-dropdown-light.png)
 
 ---
 

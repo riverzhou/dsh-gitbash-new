@@ -47,20 +47,28 @@ const styles: Record<string, CSSProperties> = {
     minWidth: 220,
     maxWidth: '100%',
     padding: '4px 7px',
-    border: '1px solid color-mix(in srgb, currentColor 22%, transparent)',
+    // Native <select> popups do not inherit the page's surface color on
+    // Windows: a transparent control yields a white list with the theme's
+    // white text. Use the host's theme tokens on both the control and every
+    // <option>, with system-color fallbacks for older hosts.
+    border: '1px solid var(--dsw-alias-border-l2, color-mix(in srgb, currentColor 22%, transparent))',
     borderRadius: 6,
-    background: 'transparent',
-    color: 'inherit',
+    backgroundColor: 'var(--dsw-alias-bg-layer-2, Canvas)',
+    color: 'var(--dsw-alias-brand-text, CanvasText)',
     fontSize: 12,
+  },
+  option: {
+    backgroundColor: 'var(--dsw-alias-bg-layer-2, Canvas)',
+    color: 'var(--dsw-alias-brand-text, CanvasText)',
   },
   input: {
     flex: 1,
     minWidth: 220,
     padding: '4px 8px',
-    border: '1px solid color-mix(in srgb, currentColor 22%, transparent)',
+    border: '1px solid var(--dsw-alias-border-l2, color-mix(in srgb, currentColor 22%, transparent))',
     borderRadius: 6,
-    background: 'transparent',
-    color: 'inherit',
+    backgroundColor: 'var(--dsw-alias-bg-layer-1, Canvas)',
+    color: 'var(--dsw-alias-brand-text, CanvasText)',
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
     fontSize: 12,
   },
@@ -190,13 +198,13 @@ export function TerminalToolRow({ t, scope }: TerminalToolRowProps): ReactElemen
           disabled={disabled}
           onChange={event => choose(event.target.value)}
         >
-          <option value={AUTO}>{t('autoRecommended')}</option>
+          <option value={AUTO} style={styles.option}>{t('autoRecommended')}</option>
           {candidates.map(profile => (
-            <option key={profile.id} value={profile.id} disabled={!profile.valid}>
+            <option key={profile.id} value={profile.id} disabled={!profile.valid} style={styles.option}>
               {profileLabel(profile)}{profile.valid ? '' : ` — ${profile.problem ?? t('invalidPath')}`}
             </option>
           ))}
-          {selectedValue === MANUAL ? <option value={MANUAL}>{t('manualPath')}: {state.config.bashPath}</option> : null}
+          {selectedValue === MANUAL ? <option value={MANUAL} style={styles.option}>{t('manualPath')}: {state.config.bashPath}</option> : null}
         </select>
         <button style={styles.button} disabled={disabled} onClick={() => void controller.discover()}>
           {state.discovering ? t('refreshing') : t('refresh')}
@@ -211,8 +219,8 @@ export function TerminalToolRow({ t, scope }: TerminalToolRowProps): ReactElemen
           disabled={!state.writable || state.saving}
           onChange={event => void controller.setConfig({ compat: event.target.value as RowConfig['compat'] })}
         >
-          <option value="auto">{t('compatAuto')}</option>
-          <option value="strict">{t('compatStrict')}</option>
+          <option value="auto" style={styles.option}>{t('compatAuto')}</option>
+          <option value="strict" style={styles.option}>{t('compatStrict')}</option>
         </select>
       </div>
 
@@ -267,7 +275,7 @@ export function TerminalToolRow({ t, scope }: TerminalToolRowProps): ReactElemen
               onChange={event => void controller.setConfig({ msystem: event.target.value as MsystemSetting })}
             >
               {MSYSTEM_OPTIONS.map(option => (
-                <option key={option} value={option}>{option === 'auto' ? t('msystemAuto') : option}</option>
+                <option key={option} value={option} style={styles.option}>{option === 'auto' ? t('msystemAuto') : option}</option>
               ))}
             </select>
             <span style={styles.muted}>{t('msystemHint')}</span>
