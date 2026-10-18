@@ -94,6 +94,7 @@ set "DSH_CLI=%LOCALAPPDATA%\Programs\DeepSeek Harness\resources\runtime\cli\bin\
 ### 环境隔离
 
 - Git profile：`MSYSTEM=MINGW64`，PATH 前置 `<root>\bin`、`<root>\usr\bin`、`<root>\ucrt64\bin`（存在时）。
+- **Git 的 `bin\bash.exe` 会被归一化到 `usr\bin\bash.exe`**：前者是 launcher，会把 `MSYSTEM` 重置为安装自带的 UCRT64；后者才遵守我们设置的环境。
 - MSYS2 profile：`MSYSTEM=<选择>`、`MSYS2_PATH_TYPE=inherit`，PATH 前置 `<env>\bin`、`<root>\usr\bin`、`<root>\usr\local\bin`。
 - **不会**把另一套系统的 PATH 混进来（如 MSYS2 会话不继承 Git 的 `usr\bin`；反之亦然）。
 - `dshEnv`（`DSH_*`）最后合并；`HOME` / `TMP` / `LANG` 不覆盖。
@@ -120,11 +121,48 @@ set "DSH_CLI=%LOCALAPPDATA%\Programs\DeepSeek Harness\resources\runtime\cli\bin\
 
 ---
 
+## 界面
+
+设置页只保留一行主控制，默认很轻：
+
+- **Shell**：`自动（推荐）` / Git for Windows / MSYS2 各环境，直接选；
+- **兼容**：兼容模式 / 严格模式；
+- 一行红字说明安全边界；
+- **高级与诊断** 折叠后才是手动路径、测试、MSYS2 环境和状态细节。
+
+![设置页：终端工具（Git Bash / MSYS2）](docs/images/settings-row.png)
+
+真机会话里，后台任务和子智能体都由 DSH 原生卡片显示：标题栏会显示
+`1 个后台任务` / `1 个子智能体`，工作步骤里分别是命令卡片、`job_output`
+结果和子智能体创建/查看卡片。
+
+![会话标题栏与后台/子智能体步骤](docs/images/ui-session-summary.png)
+![后台任务卡片：cwd + 命令](docs/images/ui-background-card.png)
+![子智能体卡片：创建/查看子智能体](docs/images/ui-subagent-card.png)
+
+> 截图来自 2026-10-18 的真机测试（MSYS2 UCRT64 配置，独立测试 profile + 56001 端口）。
+
+---
+
+## 真机验证（2026-10-18）
+
+| 场景 | Git for Windows | MSYS2 UCRT64 |
+|---|---|---|
+| 直接 bash | ✅ `MSYSTEM=MINGW64` | ✅ `MSYSTEM=UCRT64` |
+| 后台任务 | ✅ `job/registered` + `job/settled` + `BG_OK` | ✅ 同上 |
+| 子智能体 | ✅ 子会话工具目录含 `bash`、无 `pwsh`；`SUBAGENT_GIT_OK` | ✅ 子会话同上；`SUBAGENT_MSYS2_OK` |
+| 设置页切换 profile | ✅ UI 写入 Git 并生效 | ✅ UI 切回 MSYS2 并生效 |
+| 显示 | 共用同一 `bash` 工具契约；后台/子智能体事件已逐条核对 | ✅ 截图见上 |
+
+详细事件、child session id 与命令输出见 [docs/SMOKE.md](docs/SMOKE.md)。
+
+---
+
 ## 排障
 
 | 现象 | 处理 |
 |---|---|
-| 设置页显示“尚未找到 bash” | 安装 Git for Windows；或手填 `...\Git\bin\bash.exe`；点“自动发现” |
+| 设置页显示“尚未找到 bash” | 安装 Git for Windows；或手填 `...\Git\usr\bin\bash.exe`；点“自动发现” |
 | 会话里仍只有 pwsh | 确认 DSH ≥0.2.1、插件已在 profile bundles 中、**重启 DSH**；看 `%TEMP%\dsh-gitbash.log` 的 `replace:` 行 |
 | MSYS2 报环境不存在 | 选一个已安装的环境（`ucrt64\bin` 等存在）；重新“自动发现” |
 | `workspace-write` 下报 strict | 把 compat 改为 auto，或切到 danger-full-access |

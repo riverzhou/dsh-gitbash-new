@@ -15,7 +15,7 @@
 | 文件 | 插件源码 + 构建产物 `lib/` + 文档/测试/脚本（见 §3） |
 | 源码 / 技术栈 | TypeScript（host ESM + client bundle）+ esbuild；`lib/` 已构建并入库 |
 | 项目定位 | ✅ **已确定并实现**（见 §1；设计见 `docs/DESIGN.md`） |
-| 验证 | `pnpm test` 59/59；`pnpm selftest` 10/10；`pnpm compatcheck` 通过；真机 DSH 0.2.1-rc.2 冒烟通过（`docs/SMOKE.md`） |
+| 验证 | `pnpm test` 59/59；`pnpm selftest` 10/10；`pnpm compatcheck` 通过；DSH 0.2.1-rc.2 真机：Git + MSYS2 的 direct/background/subagent、UI 卡片与设置切换均通过（`docs/SMOKE.md`） |
 | 平台 | Windows 10（19045）/ Git for Windows 2.56（bash 5.3.15）/ MSYS2 5.3.20（UCRT64） |
 | 运行时 | Node v24.21.0；DSH 桌面运行时 `0.2.1-rc.2` |
 | 已知硬约束 | Git Bash/MSYS2 无法在 DSH Windows ACL 沙箱内启动；兼容模式策略见 §1 与 README |
@@ -121,7 +121,8 @@ dsh-gitbash-new/
 ├── docs/
 │   ├── README.md          # 文档索引
 │   ├── DESIGN.md          # 设计定稿
-│   └── SMOKE.md           # 真机冒烟记录
+│   ├── SMOKE.md           # 真机冒烟记录
+│   └── images/            # 设置页 / 后台 / 子智能体截图
 └── lib/                   # 构建产物（入库；`dsh plugin add link:` 直接加载）
     ├── index.js
     └── client.js
@@ -174,7 +175,7 @@ dsh-gitbash-new/
    结果文本标记、`tool/result.meta.cwd` 反推。`presentationMeta` 必须返回 `{ cwd }`。
 4. **结果标记**：`[exit code: N]` / `[killed by signal: X]` 必须是最后一行；
    `[stderr]` 段头；截断提示带 spill 路径；compat 提示在标记之前，用
-   `[compat: Git Bash runs outside the DSH file sandbox (session mode …)]`。
+   `[compat: bash runs outside the DSH file sandbox (session mode …)]`。
 5. **沙箱硬约束**：MSYS2 在 WRITE_RESTRICTED / Low 令牌下起不来；不要试图用
    `ctx.sandbox.confine` 包 bash，也不要偷偷放宽令牌。当前策略见 §1。
 6. **PATH 隔离**：Git 与 MSYS2 的 `usr\bin` 不能互混；`composePath` 会按
@@ -187,3 +188,6 @@ dsh-gitbash-new/
    `configForms.get(entryId)`；不要再读 0.2.1 已删除的 `snapshot.mode`。
 10. **JS/TS**：host 是 Node ESM、client 是经典 CJS 工厂；client 只允许 require
     react / react/jsx-runtime 等页面种子模块；client 入口必须声明 `inject`。
+11. **Git 的 `bin\bash.exe` 是 launcher**：会按安装自带的 UCRT64 重置 `MSYSTEM`/PATH，
+    覆盖我们传入的 `MINGW64`。`profileFromPath` 必须归一化到 `usr\bin\bash.exe`；
+    真机曾因此让 Git 会话显示 `MSYSTEM=UCRT64`。

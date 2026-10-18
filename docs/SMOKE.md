@@ -130,3 +130,69 @@ The bash tool executed successfully.
 - read-only / strict / 提权审批未在真机 UI 点过；由单元测试覆盖决策表，
   真机行为需在正式安装后按 README 的权限表复核。
 - `run_in_background` / promote 的 UI 卡片未在真机截图；job 逻辑由单元测试与官方 job 契约覆盖。
+
+---
+
+## 追加：Git / MSYS2 全链路 + UI 显示（2026-10-18 08:0x）
+
+测试 profile：`gitbash-e2e`（web 模板 + `link:D:/GitHub/dsh-gitbash-new`），端口 `56001`；
+模型 `deepseek-flash`；每个场景独立会话，避免历史串扰。
+
+### 结果矩阵
+
+| 场景 | Git for Windows | MSYS2 UCRT64 |
+|---|---|---|
+| 直接 bash | ✅ `GIT_OK` / `MSYSTEM=MINGW64` | ✅ `MSYS2_OK` / `MSYSTEM=UCRT64` |
+| 后台任务 | ✅ job `bash-2928682190734a06`；`job_output(wait=true)` → `BG_OK` + `completed, exit code: 0` | ✅ job `bash-f3faa97635d24518`；同样 `BG_OK` |
+| 子智能体 | ✅ child `941bee08-9491-4697-af47-62e832080c72`；child bash → `SUBAGENT_GIT_OK` | ✅ child `964108f7-a4e1-462d-a454-3107b1710176`；child bash → `SUBAGENT_MSYS2_OK` |
+| 子会话工具目录 | ✅ `bash` 在、`pwsh` 不在 | ✅ 同左 |
+| `meta.cwd` | ✅ `D:\GitHub\dsh-gitbash-new` | ✅ 同左 |
+
+后台事件（Git 示例）：
+
+```text
+job/registered  jobId=bash-2928682190734a06  owner=session-5844...  kind=bash
+                toolCall={ callId: call_00_SlL..., rootCallId: call_00_SlL... }
+job/settled     status=completed  cause=producer  detail="exit code: 0"
+```
+
+子智能体（Git 示例）：
+
+```text
+parent tool/call    subagent { description: "subagent bash smoke", prompt: "..." }
+parent tool/result  started subagent 941bee08-...
+parent catalog      [{ id: 941bee08-..., mode: continuable, label: "subagent bash smoke" }]
+child tool/call     bash { command: "echo SUBAGENT_GIT_OK" }
+child tool/result   "SUBAGENT_GIT_OK\n[compat: ...]"  meta.cwd=D:\GitHub\dsh-gitbash-new
+child send_message  -> parent session-dce...
+parent notice       子代理收尾消息原文照录，含 SUBAGENT_GIT_OK
+```
+
+MSYS2 子智能体同样走 `subagent` → child `964108f7-...` → `bash` → `SUBAGENT_MSYS2_OK`
+→ `send_message` 回父会话；父会话第二轮通知里出现结果。
+
+### Git `bin` launcher 的修复
+
+真机首次把 `msystem: auto` + `bashPath: C:\Program Files\Git\bin\bash.exe` 组合时，
+子进程里 `MSYSTEM` 仍是 `UCRT64`。定位：Git 2.56 的 `bin\bash.exe` 是 launcher，
+会按安装自带的 UCRT64 重置 `MSYSTEM`/PATH，覆盖我们传入的 `MINGW64`；
+`usr\bin\bash.exe` 才遵守环境。
+
+修复：`profileFromPath` 对 Git 的 `bin\bash.exe` 自动归一化到 `usr\bin\bash.exe`
+（存在时）。修复后同一配置实测 `MSYSTEM=MINGW64`。
+
+### UI 显示验证
+
+- 设置页：`账号菜单 → 设置 → 通用设置`，截图 `docs/images/settings-row.png`；
+  折叠态只有 Shell 选择、兼容选择、一行红字警告；高级/诊断折叠。
+- 在 UI 的 Shell 下拉里实际切换到 Git，读回 `/api/dsh-gitbash/state`：
+  `effective.id=git|...|MINGW64`、`bashPath=C:\Program Files\Git\usr\bin\bash.exe`、
+  `msystem=MINGW64`；再切回 MSYS2 UCRT64，读回一致。说明设置表单写入/刷新链路正常。
+- UI 会话（MSYS2）标题栏显示 `1 个子智能体`、`1 个后台任务`；
+  展开工作步骤后可见：
+  - `运行命令 · UI background smoke` 卡片：`dsh-gitbash-new  sleep 2; echo UI_BG_OK`；
+  - `读取任务输出 · bash-... · 已完成`；
+  - `已协调子智能体并调用工具` / `创建子智能体 · ... · 已启动` / `查看子智能体 · 1 个智能体`。
+- 截图：`docs/images/ui-session-summary.png`、`ui-background-card.png`、`ui-subagent-card.png`。
+- Git 的 UI 卡片未单独截图；工具名、参数、结果标记、`meta.cwd` 与 MSYS2 完全同形
+  （同一 `bash` 工具定义），事件层已逐条核对。

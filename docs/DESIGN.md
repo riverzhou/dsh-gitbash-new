@@ -230,7 +230,7 @@ interface BashProfile {
 }
 ```
 
-- **Git for Windows**：一个安装 = 一个 profile，`msystem='MINGW64'`，`path` 优先 `<root>\bin\bash.exe`，退回 `<root>\usr\bin\bash.exe`。
+- **Git for Windows**：一个安装 = 一个 profile，`msystem='MINGW64'`，`path` 固定用 `<root>\usr\bin\bash.exe`。用户填 `<root>\bin\bash.exe` 时自动归一化到 `usr\bin`（Git 2.56 的 `bin` launcher 会把 `MSYSTEM` 重置为 UCRT64，必须绕开）。
 - **MSYS2**：一个安装可枚举多个 profile（每个环境一个）：`UCRT64`、`MINGW64`、`CLANG64`、`CLANGARM64`、`MINGW32`、`MSYS`；`path` 都是 `<root>\usr\bin\bash.exe`，但 `msystem` 与 `environmentRoot` 不同。**两个 MSYS2 环境共用同一个 bash.exe，所以 `bashPath` 单独不足以区分，必须同时持久化 `msystem`。**
 - **Cygwin**：best-effort，`flavor='cygwin'`，无 `MSYSTEM`；默认排在 Git/MSYS2 之后，UI 标注 experimental。
 
@@ -305,16 +305,25 @@ interface BashProfile {
 
 ### 6.2 设置行（`settings.general.item`，id `git-bash`，order 60）
 
-- 当前路径（配置值或自动发现值）+ **flavor 标签**（Git for Windows / MSYS2 / Cygwin + MSYSTEM）+ 来源标签（已配置/自动发现/无效）。
-- 路径输入框 + “自动发现”按钮 + 候选下拉（每个 profile 一项，含 flavor、MSYSTEM、版本）。
-- **MSYS2 环境下拉**（UCRT64/MINGW64/CLANG64/CLANGARM64/MSYS；Git 时隐藏）；选环境即写 `msystem`。
-- “测试”按钮：校验并跑 `bash --version`。
-- 兼容模式选择（auto/strict）+ **红字警告**（auto 时）：
-  “Git Bash/MSYS2 与 DSH 的 Windows 文件沙箱在 OS 层不兼容。auto 下，workspace-write 会话中的 bash 以完全访问运行（可写工作区外文件）；read-only 仍拒绝。文件工具仍受沙箱保护。”
-- 结果文本使用短标记 `[compat: Git Bash runs outside the DSH file sandbox (session mode …)]`；
-  工具描述明确它是**部署提示，不是命令 stderr**。
-- 状态行：平台、`ctx.shell.sandboxMode`、最近一次替换（applied/reason）。
+默认只显示三层，保持和官方 General 行相近的密度：
+
+1. **标题 + 生效 profile 徽章**（如 `Git for Windows` / `MSYS2 UCRT64`）。
+2. **Shell 选择**：`自动（推荐）` + 已缓存 profile（Git / 各 MSYS2 环境），
+   直接选中即写 `bashPath + msystem`；旁边一个 `刷新` 执行带版本探测的发现。
+   候选来自 `/state` 的缓存，打开设置不需要等待扫描。
+3. **兼容选择**（auto/strict）+ **一行**红字安全提示；完整解释放在 `title` 与 README。
+
+折叠的 **高级与诊断** 里才是：手动路径 + 使用/恢复自动/测试、MSYS2 环境下拉、
+平台 / `ctx.shell.sandboxMode` / 后台任务 / 最近替换。这样默认界面不展示诊断表格，
+但排障信息仍在一处。
+
+- Shell 选择按 `path + msystem` 匹配当前配置；Git 的 `bin\bash.exe` 已归一化到
+  `usr\bin\bash.exe`，避免 launcher 重置 `MSYSTEM`。
 - 所有控件在 `configForms` 不可写时禁用并显示原因；不阻塞设置页打开。
+- 真机 UI 已验证：Shell 下拉切 Git → `/state` 读回 `git|...|MINGW64`；切回 MSYS2
+  UCRT64 读回一致。截图见 `docs/images/settings-row.png`。
+- 结果文本使用短标记 `[compat: bash runs outside the DSH file sandbox (session mode …)]`；
+  工具描述明确它是**部署提示，不是命令 stderr**。
 
 ### 6.3 诊断
 
@@ -417,6 +426,9 @@ interface BashProfile {
 | 真实命令 | ✅ `echo LIVE_BASH_OK` → stdout `LIVE_BASH_OK` |
 | `meta.cwd` | ✅ `D:\GitHub\dsh-gitbash-new` |
 | 权限 | 测试会话 `workspace-write` + `compat: auto`，结果带 `[compat: ...]` |
-| MSYS2 | ✅ 集成测试真实执行 UCRT64；模型回合未单独跑（见 SMOKE 的未覆盖项） |
+| MSYS2 | ✅ 模型回合、后台任务、子智能体全链路真机跑通（UCRT64） |
+| Git 子智能体 / 后台 | ✅ child bash、`job/registered`/`job/settled`、`meta.cwd` 全部核对 |
+| 设置 UI | ✅ 实际截图；Shell 下拉切 Git/MSYS2 写入并读回成功 |
+| 后台/子智能体 UI | ✅ 标题栏 `1 个后台任务` / `1 个子智能体`，命令卡/子智能体卡正常（MSYS2 截图） |
 
 复跑步骤与原始事件见 [SMOKE.md](SMOKE.md)。测试 profile/端口均为独立实例，不影响桌面会话。
