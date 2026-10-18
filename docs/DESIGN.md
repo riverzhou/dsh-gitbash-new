@@ -242,7 +242,7 @@ interface BashProfile {
    - Git：`%ProgramFiles%\Git`、`%ProgramFiles(x86)%\Git`、`%LocalAppData%\Programs\Git`、`C:\Git`、`D:\Git`；
    - MSYS2：`C:\msys64`、`D:\msys64`、`%LocalAppData%\msys64`、`C:\msys32`；
    - Cygwin：`C:\cygwin64`、`C:\cygwin`。
-4. `where.exe git` → 从 `git.exe` 反推安装根与 `usr\bin\bash.exe`（手填 `bin\bash.exe` 会归一化）；`where.exe bash` → 每一行（排除 WSL 后）识别 flavor。
+4. `where.exe git` → 从 `git.exe` 反推安装根（`usr\bin` 与 `ucrt64`/`mingw64`/`clang64`/... 环境 bin 都按三层推导）；`where.exe bash` → 每一行（排除 WSL 后）识别 flavor。手填 Git `bin\bash.exe` 会归一化到 `usr\bin`。
 5. `PATH` 中每个目录下的 `bash.exe` / `git.exe`。
 
 每个根先识别 flavor（MSYS2 marker 优先：`etc\msys2-release`、`msys2.exe`、`pacman.exe`、`mingw64\bin`；Git marker：`cmd\git.exe`、`mingw64\bin\git.exe`），再枚举 profile。按 `realpath + msystem + flavor` 去重。
@@ -320,6 +320,8 @@ interface BashProfile {
 - Shell 选择按 `path + msystem` 匹配当前配置；Git 的 `bin\bash.exe` 已归一化到
   `usr\bin\bash.exe`，避免 launcher 重置 `MSYSTEM`。
 - 所有控件在 `configForms` 不可写时禁用并显示原因；不阻塞设置页打开。
+- `/state` 在配置路径无效时返回 `problem`，row 在壳选择下方直接显示，不再只显示“noPath”。
+- 路径 + `msystem` 通过一次 `configForms.mutate` 原子写入，避免中间态。
 - 真机 UI 已验证：Shell 下拉切 Git → `/state` 读回 `git|...|MINGW64`；切回 MSYS2
   UCRT64 读回一致。截图见 `docs/images/settings-row.png`。
 - 结果文本使用短标记 `[compat: bash runs outside the DSH file sandbox (session mode …)]`；
@@ -368,7 +370,7 @@ interface BashProfile {
 
 ## 9. 打包与安装
 
-- npm 包名：`@riverzh/dsh-gitbash`（DSH entry id 仍是 `dsh-gitbash`）；`0.1.0` 是内部实现基线，`0.2.0` 是首个公开发布版本。
+- npm 包名：`@riverzh/dsh-gitbash`（DSH entry id 仍是 `dsh-gitbash`）；`0.1.0` 是内部实现基线，`0.2.0` 是首个公开发布版本，`0.2.1` 为审计修复版；License 为 `GPL-3.0-only`。
 - `package.json`：
   - `"type":"module"`，`main: "lib/index.js"`，`exports: { ".": ..., "./client": ... }`。
   - `"dsh": { "bundle": { "patch": "./cordis.patch.yml" }, "client": { "platform": "web" } }`。

@@ -106,6 +106,14 @@ Reopen DSH, then hard-refresh the Web UI (`Ctrl+Shift+R`).
 %DSH_CLI% plugin --profile desktop add github:riverzhou/dsh-gitbash-new
 ```
 
+### From npm (published)
+
+```bat
+%DSH_CLI% plugin --profile desktop add @riverzh/dsh-gitbash@0.2.1
+```
+
+Use `@riverzh/dsh-gitbash@latest` for the newest release.
+
 ### Upgrade
 
 Use the same CLI, restart DSH, hard-refresh:
@@ -508,7 +516,7 @@ the native UI cards were exercised. Raw events: [docs/SMOKE.md](docs/SMOKE.md).
 pnpm install
 pnpm build        # lib/index.js + lib/client.js
 pnpm check        # tsc --noEmit
-pnpm test         # node:test; 59 tests, including real Git/MSYS2 when present
+pnpm test         # node:test; 69 tests, including real Git/MSYS2 when present
 pnpm selftest     # pure-logic checks, no DSH needed
 pnpm compatcheck  # contract-string check against the installed DSH
 ```
@@ -567,4 +575,4 @@ The npm package is `@riverzh/dsh-gitbash` (the DSH entry id stays `dsh-gitbash`)
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+GNU General Public License v3.0 only (`GPL-3.0-only`). See [LICENSE](LICENSE).

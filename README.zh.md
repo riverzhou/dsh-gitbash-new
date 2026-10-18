@@ -100,6 +100,14 @@ set "DSH_CLI=%LOCALAPPDATA%\Programs\DeepSeek Harness\resources\runtime\cli\bin\
 %DSH_CLI% plugin --profile desktop add github:riverzhou/dsh-gitbash-new
 ```
 
+### 从 npm 安装（已发布）
+
+```bat
+%DSH_CLI% plugin --profile desktop add @riverzh/dsh-gitbash@0.2.1
+```
+
+最新版可用 `@riverzh/dsh-gitbash@latest`。
+
 ### 升级
 
 ```bat
@@ -461,7 +469,7 @@ WSL 一律排除：`System32\bash.exe`、`Sysnative`、`WindowsApps`、`\\wsl$`�
 pnpm install
 pnpm build        # lib/index.js + lib/client.js
 pnpm check        # tsc --noEmit
-pnpm test         # node:test；59 个用例，含真实 Git/MSYS2（存在时）
+pnpm test         # node:test；69 个用例，含真实 Git/MSYS2（存在时）
 pnpm selftest     # 纯逻辑自测，不需要 DSH
 pnpm compatcheck  # 对已安装 DSH 做契约字符串核对
 ```
@@ -516,4 +524,4 @@ README。
 
 ## License
 
-MIT，见 [LICENSE](LICENSE)。
+GNU General Public License v3.0 only（`GPL-3.0-only`），见 [LICENSE](LICENSE)。
