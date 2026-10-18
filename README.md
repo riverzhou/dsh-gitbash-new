@@ -33,10 +33,14 @@ Git Bash / MSYS2 的运行时（MSYS2）**无法在 DSH 官方的 Windows ACL �
 
 ### 从本地目录（开发）
 
-先完全退出 DSH Desktop，再：
+先完全退出 DSH Desktop，再使用 **Desktop 自带 CLI**（`0.2.1`；不是 npm 全局的 `0.1.7`）：
 
 ```bat
-dsh plugin --profile desktop add link:D:/GitHub/dsh-gitbash-new
+set "DSH_CLI=%LOCALAPPDATA%\Programs\DeepSeek Harnessesourcesuntime\cliin\dsh.cmd"
+%DSH_CLI% --version
+:: 应为 0.2.1-rc.2 或更高；0.1.7 的全局 dsh 不能安装本插件
+
+%DSH_CLI% plugin --profile desktop add link:D:/GitHub/dsh-gitbash-new
 ```
 
 重新打开 DSH，浏览器硬刷新（Ctrl+Shift+R）。
@@ -46,7 +50,7 @@ dsh plugin --profile desktop add link:D:/GitHub/dsh-gitbash-new
 > 先移除或禁用它，再启用本插件：
 >
 > ```bat
-> dsh plugin --profile desktop remove dsh-tweaks-git-bash-terminal-tool
+> %DSH_CLI% plugin --profile desktop remove dsh-tweaks-git-bash-terminal-tool
 > ```
 >
 > 同时安装时，先加载的一方完成替换，后加载的一方会因 `pwsh` 已不可限制而跳过（日志里可见 `skipped ... pwsh is not restrictable`）。
@@ -54,7 +58,7 @@ dsh plugin --profile desktop add link:D:/GitHub/dsh-gitbash-new
 ### 从 GitHub（发布后）
 
 ```bat
-dsh plugin --profile desktop add github:converk/dsh-gitbash-new
+%DSH_CLI% plugin --profile desktop add github:converk/dsh-gitbash-new
 ```
 
 ### 依赖
@@ -154,7 +158,7 @@ pnpm compatcheck  # 对已安装的 DSH 产物做契约字符串核对
 ## 卸载
 
 ```bat
-dsh plugin --profile desktop remove dsh-gitbash
+%DSH_CLI% plugin --profile desktop remove dsh-gitbash
 ```
 
 重启 DSH。设置页条目随插件一起消失；已写入 profile patch 的配置可以保留或手动删除。
