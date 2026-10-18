@@ -368,7 +368,7 @@ interface BashProfile {
 
 ## 9. 打包与安装
 
-- 包名：`dsh-gitbash`；版本从 `0.1.0` 起。
+- 包名：`dsh-gitbash`；`0.1.0` 是内部实现基线，`0.2.0` 是首个公开发布版本。
 - `package.json`：
   - `"type":"module"`，`main: "lib/index.js"`，`exports: { ".": ..., "./client": ... }`。
   - `"dsh": { "bundle": { "patch": "./cordis.patch.yml" }, "client": { "platform": "web" } }`。

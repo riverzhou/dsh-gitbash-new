@@ -97,7 +97,7 @@ set "DSH_CLI=%LOCALAPPDATA%\Programs\DeepSeek Harness\resources\runtime\cli\bin\
 ### 从 GitHub 安装（发布后）
 
 ```bat
-%DSH_CLI% plugin --profile desktop add github:converk/dsh-gitbash-new
+%DSH_CLI% plugin --profile desktop add github:riverzhou/dsh-gitbash-new
 ```
 
 ### 升级

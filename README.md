@@ -103,7 +103,7 @@ Reopen DSH, then hard-refresh the Web UI (`Ctrl+Shift+R`).
 ### From GitHub (after publishing)
 
 ```bat
-%DSH_CLI% plugin --profile desktop add github:converk/dsh-gitbash-new
+%DSH_CLI% plugin --profile desktop add github:riverzhou/dsh-gitbash-new
 ```
 
 ### Upgrade
