@@ -103,16 +103,16 @@ set "DSH_CLI=%LOCALAPPDATA%\Programs\DeepSeek Harness\resources\runtime\cli\bin\
 ### 升级
 
 ```bat
-%DSH_CLI% plugin --profile desktop remove dsh-gitbash
+%DSH_CLI% plugin --profile desktop remove @riverzh/dsh-gitbash
 %DSH_CLI% plugin --profile desktop add link:D:/GitHub/dsh-gitbash-new
 ```
 
-发布版把 `link:...` 换成 `dsh-gitbash@<version>`。升级后重启 DSH 并硬刷新。
+发布版把 `link:...` 换成 `@riverzh/dsh-gitbash@<version>`。升级后重启 DSH 并硬刷新。
 
 ### 卸载
 
 ```bat
-%DSH_CLI% plugin --profile desktop remove dsh-gitbash
+%DSH_CLI% plugin --profile desktop remove @riverzh/dsh-gitbash
 ```
 
 重启 DSH。设置项随插件消失；profile 的 `cordis.patch.yml` 里残留的
@@ -494,7 +494,7 @@ pnpm test
 pnpm pack
 ```
 
-包名 `dsh-gitbash`，`engines.dsh = ">=0.2.1-0"`，`engines.node = "^22.19.0 || >=24.0.0"`。
+npm 包名 `@riverzh/dsh-gitbash`（DSH entry id 仍是 `dsh-gitbash`），`engines.dsh = ">=0.2.1-0"`，`engines.node = "^22.19.0 || >=24.0.0"`。
 包含 host 入口、client bundle、`lib/`、`src/`、`cordis.patch.yml`、docs 与两份
 README。
 

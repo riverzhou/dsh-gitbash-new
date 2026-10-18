@@ -5,7 +5,7 @@ entry; the Git history is the evidence.
 
 ## 0.2.0 — 2026-10-18
 
-First public release. `0.1.0` was the internal implementation baseline; the
+First public release, published as `@riverzh/dsh-gitbash`. `0.1.0` was the internal implementation baseline; the
 following is what is new in the published package.
 
 ### Added

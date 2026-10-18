@@ -368,7 +368,7 @@ interface BashProfile {
 
 ## 9. 打包与安装
 
-- 包名：`dsh-gitbash`；`0.1.0` 是内部实现基线，`0.2.0` 是首个公开发布版本。
+- npm 包名：`@riverzh/dsh-gitbash`（DSH entry id 仍是 `dsh-gitbash`）；`0.1.0` 是内部实现基线，`0.2.0` 是首个公开发布版本。
 - `package.json`：
   - `"type":"module"`，`main: "lib/index.js"`，`exports: { ".": ..., "./client": ... }`。
   - `"dsh": { "bundle": { "patch": "./cordis.patch.yml" }, "client": { "platform": "web" } }`。
@@ -378,12 +378,12 @@ interface BashProfile {
   ```yaml
   - insert:
       - id: dsh-gitbash
-        name: dsh-gitbash
+        name: '@riverzh/dsh-gitbash'
         disabled: !!js process.platform !== 'win32'
   ```
 - 构建：host ESM（`packages: 'external'`）+ client classic CJS wrapper（`window.__ModuleLoader__.load`）+ sourcemap。
 - 安装：`%DSH_CLI% plugin --profile desktop add link:D:/GitHub/dsh-gitbash-new`；`DSH_CLI` 指桌面自带 CLI（`%LOCALAPPDATA%\Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd`），不是 npm 全局 0.1.7；重启 DSH；硬刷新浏览器。
-- 卸载：`%DSH_CLI% plugin --profile desktop remove dsh-gitbash`；重启。
+- 卸载：`%DSH_CLI% plugin --profile desktop remove @riverzh/dsh-gitbash`；重启。
 - 升级：改版本 + CHANGELOG；`compatcheck` 对当前 DSH 跑一遍；重装并重启。
 
 ---

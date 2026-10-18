@@ -1,5 +1,5 @@
 {
-  "name": "dsh-gitbash",
+  "name": "@riverzh/dsh-gitbash",
   "description": "Windows Git Bash / MSYS2 terminal tool for DeepSeek Harness (DSH), replacing pwsh with a selectable bash profile",
   "version": "0.2.0",
   "type": "module",

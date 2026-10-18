@@ -111,16 +111,16 @@ Reopen DSH, then hard-refresh the Web UI (`Ctrl+Shift+R`).
 Use the same CLI, restart DSH, hard-refresh:
 
 ```bat
-%DSH_CLI% plugin --profile desktop remove dsh-gitbash
+%DSH_CLI% plugin --profile desktop remove @riverzh/dsh-gitbash
 %DSH_CLI% plugin --profile desktop add link:D:/GitHub/dsh-gitbash-new
 ```
 
-For a released version, replace `link:...` with `dsh-gitbash@<version>`.
+For a released version, replace `link:...` with `@riverzh/dsh-gitbash@<version>`.
 
 ### Uninstall
 
 ```bat
-%DSH_CLI% plugin --profile desktop remove dsh-gitbash
+%DSH_CLI% plugin --profile desktop remove @riverzh/dsh-gitbash
 ```
 
 Restart DSH. The settings row disappears with the plugin. A `dsh-gitbash`
@@ -543,7 +543,7 @@ pnpm test
 pnpm pack
 ```
 
-The package is `dsh-gitbash` with `engines.dsh = ">=0.2.1-0"` and
+The npm package is `@riverzh/dsh-gitbash` (the DSH entry id stays `dsh-gitbash`) with `engines.dsh = ">=0.2.1-0"` and
 `engines.node = "^22.19.0 || >=24.0.0"`. It ships the host entry, client bundle, `lib/`, `src/`,
 `cordis.patch.yml`, docs and both READMEs.
 

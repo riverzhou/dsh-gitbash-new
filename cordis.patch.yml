@@ -5,5 +5,5 @@
 # enters the startup graph.
 - insert:
     - id: dsh-gitbash
-      name: dsh-gitbash
+      name: '@riverzh/dsh-gitbash'
       disabled: !!js process.platform !== 'win32'

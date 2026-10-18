@@ -85,7 +85,7 @@ dsh-gitbash-new/
 ├── README.zh.md           # 中文手册：安装 / 安全 / 用法 / 设置 / 排障
 ├── CHANGELOG.md           # 版本留痕
 ├── LICENSE                # MIT
-├── package.json           # 包名 dsh-gitbash；dsh.bundle / dsh.client / engines.dsh
+├── package.json           # npm 包名 @riverzh/dsh-gitbash；dsh.bundle / dsh.client / engines.dsh
 ├── pnpm-workspace.yaml    # pnpm 11 的 allowBuilds（esbuild）
 ├── tsconfig.json          # strict + allowImportingTsExtensions + react-jsx
 ├── build.mjs              # host ESM + client classic CJS wrapper + sourcemap
