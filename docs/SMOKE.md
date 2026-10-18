@@ -16,6 +16,11 @@
 
 ## 复跑步骤
 
+> 原始测试 profile `gitbash-test-web` 已清理；复跑时先用 web 模板新建一个 profile，
+> 把本仓库 `link:` 进去，端口可自选。下面的命令保留当时的 URL/cookie 形式，token
+> 已过期，仅作为流程证据。
+
+
 ```bat
 :: 1. 从 web 模板创建测试 profile（只需一次）
 dsh --profile gitbash-test-web --from-default-profile web --dump-config
@@ -124,12 +129,15 @@ The bash tool executed successfully.
 
 ## 未覆盖 / 后续
 
-- MSYS2 的**模型回合**未单独跑；但 `discover` 返回 7 个 profile（Git + MSYS2 六个环境），
-  `tests/integration-real.test.mjs` 已用真实 MSYS2 验证 `MSYSTEM=UCRT64`、PATH 隔离、
-  退出码、stderr、子进程与超时。
-- read-only / strict / 提权审批未在真机 UI 点过；由单元测试覆盖决策表，
-  真机行为需在正式安装后按 README 的权限表复核。
-- `run_in_background` / promote 的 UI 卡片未在真机截图；job 逻辑由单元测试与官方 job 契约覆盖。
+> 本节记录**首次冒烟（仅 Git 直接调用）时**的状态。其中 MSYS2 模型回合、
+> 两套环境的后台任务/子智能体、UI 卡片都已在下方“追加”节覆盖。
+
+- read-only / strict / 提权审批仍未在真机 UI 点过；由单元测试覆盖决策表，
+  正式安装后按 README 的权限表复核。
+- `job_kill` / 超时 promote 的 UI 未在本轮单独点过；job 逻辑由单元测试与官方
+  job 契约覆盖。
+- 截图中的 `[compat: Git Bash ...]` 是当时文本；当前实现已泛化为
+  `[compat: bash ...]`，机制与位置不变。
 
 ---
 

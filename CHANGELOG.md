@@ -28,7 +28,7 @@ entry; the Git history is the evidence.
   compatibility switch, a one-line safety warning, and a folded
   "Advanced & diagnostics" section for manual path/test/environment/status.
   `/api/dsh-gitbash/{state,discover,validate}` routes.
-- Git `binash.exe` is canonicalized to `usrinash.exe`; the launcher
+- Git `bin\bash.exe` is canonicalized to `usr\bin\bash.exe`; the launcher
   would otherwise reset `MSYSTEM` to the installation's UCRT64 and override the
   requested environment.
 - Real-machine verification (DSH 0.2.1-rc.2): Git and MSYS2 each exercised
@@ -37,6 +37,16 @@ entry; the Git history is the evidence.
   switch and background/subagent cards. Screenshots in `docs/images/`.
 - Diagnostics at `%TEMP%\dsh-gitbash.log`; unit, executor, replacement, tool
   and real Git/MSYS2 integration tests; `selftest` and `compatcheck` scripts.
+
+### Documentation
+
+- Bilingual manuals: `README.md` (English) and `README.zh.md` (简体中文), each
+  covering install/upgrade/uninstall, the security model, the bash parameter and
+  result contract, background jobs, subagents, Git/MSYS2 profiles, settings,
+  cookbook, troubleshooting, diagnostics and development.
+- Refreshed `docs/DESIGN.md` (compact settings row, `usr\bin` canonicalization,
+  engines/install guidance) and `docs/SMOKE.md` (two-stage real-machine coverage
+  and UI evidence); screenshots registered in `docs/images/`.
 
 ### Security
 

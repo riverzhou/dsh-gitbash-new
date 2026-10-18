@@ -41,9 +41,9 @@
 | 项 | 内容 |
 |---|---|
 | 一句话目标 | 在 Windows 上给 DSH 一个**完整可用的 bash 终端环境**：用 **Git for Windows 或 MSYS2**（可选）取代默认 pwsh，同时保留 DSH 官方终端工具的全部行为（cwd / 后台任务 / 超时转后台 / 沙箱与提权 / 终端卡片 / PTC）。 |
-| 交付物 | 一个可安装的 DSH 双面插件：host 半区（Git/MSYS2 profile 发现与校验、bash 工具、沙箱兼容、设置路由）+ client 半区（设置页、自动发现、MSYS2 环境选择、状态与诊断）；配套测试、README、CHANGELOG、设计/冒烟文档。 |
+| 交付物 | 一个可安装的 DSH 双面插件：host 半区（Git/MSYS2 profile 发现与校验、bash 工具、沙箱兼容、设置路由）+ client 半区（设置页、自动发现、MSYS2 环境选择、状态与诊断）；配套测试、中英 README、CHANGELOG、设计/冒烟文档。 |
 | 明确不做的事 | 不改 DSH 源码/安装文件；不自动选 WSL 的 bash；不引入自定义 preset；不接管 `ctx.shell`（pwsh 保留）；Linux/macOS 上不注册任何行为。 |
-| 技术栈 | TypeScript（host ESM + client bundle）、esbuild、官方 `ctx` 服务契约（结构性窄化，不 import 官方包）；Node ≥ 22.19。 |
+| 技术栈 | TypeScript（host ESM + client bundle）、esbuild、官方 `ctx` 服务契约（结构性窄化，不 import 官方包）；Node `^22.19.0 || >=24.0.0`。 |
 | 最低 DSH | **0.2.1**（以 0.2.1-rc.2 的源码与桌面运行时为基线；用特性探测兼容 0.2.x）。 |
 | 「怎么算做完」 | ① 新会话的模型工具目录里**只有 `bash`、没有 `pwsh`**，且 bash 命令能真实执行（真机已验证）；② **安全决策如实落地**：`workspace-write` 下 bash 以完全访问运行并在结果/设置页显式标注，`read-only` 拒绝，文件工具仍受官方沙箱（真机已验证 workspace-write；read-only/strict 由单元测试覆盖）；③ `workdir` / 后台任务 / 超时转后台 / 沙箱提权 / 终端卡片与官方 tool-bash 逐项对齐（单测 + 真机 tool call/meta.cwd）；④ 设置页能自动发现、校验、持久化 **Git 与 MSYS2** profile；⑤ 单元/集成测试与真机冒烟全绿；⑥ 安装/卸载/升级路径有文档。 |
 
@@ -81,7 +81,8 @@
 ```text
 dsh-gitbash-new/
 ├── AGENTS.md              # 本文件：代理指令入口
-├── README.md              # 人类入口：功能 / 安装 / 安全边界 / 排障
+├── README.md              # English manual: install / security / usage / troubleshooting
+├── README.zh.md           # 中文手册：安装 / 安全 / 用法 / 设置 / 排障
 ├── CHANGELOG.md           # 版本留痕
 ├── LICENSE                # MIT
 ├── package.json           # 包名 dsh-gitbash；dsh.bundle / dsh.client / engines.dsh
@@ -136,7 +137,8 @@ dsh-gitbash-new/
 
 ## 4. 文档纪律
 
-- 根目录：`README.md` 面向人类（功能/安装/安全/排障），`AGENTS.md` 面向代理（规则/契约/坑），`CHANGELOG.md` 记版本；三者分工不重复。
+- 根目录：`README.md`（英文手册）/ `README.zh.md`（中文手册）面向人类，`AGENTS.md` 面向代理（规则/契约/坑），`CHANGELOG.md` 记版本；分工不重复。
+- 两份 README 必须**结构同步、事实同步**（命令/参数/限制/截图/链接）；只改一份视为未完成。
 - `docs/README.md` 是 **docs 目录的唯一索引**；`docs/DESIGN.md` 是契约与设计的单一事实来源，`docs/SMOKE.md` 是真机证据。
 - 文档与代码**同一次提交**，不分开。
 - 契约变更必须同时改 `docs/DESIGN.md` 与 `AGENTS.md` §6（如涉及）。
@@ -157,7 +159,7 @@ dsh-gitbash-new/
 
 - [ ] `pnpm check`、`pnpm test`、`pnpm selftest`、`pnpm compatcheck` 全过（无 DSH 安装时 compatcheck 可 skip，但要说明）。
 - [ ] `git status` / `git show --stat` 逐行核对；`lib/` 与 `src/` 同步。
-- [ ] 文档（README/CHANGELOG/DESIGN/AGENTS 按影响面）与代码同提交。
+- [ ] 文档（README.md / README.zh.md / CHANGELOG/DESIGN/AGENTS 按影响面）与代码同提交；两份 README 同步。
 - [ ] 提交信息用 `-F`，写清「改了什么 / 为什么 / 影响面 / 未完成」。
 
 ---

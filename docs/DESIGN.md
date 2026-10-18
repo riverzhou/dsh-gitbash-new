@@ -12,7 +12,7 @@
 在 Windows 上把 DSH 的模型终端工具从官方 `pwsh` 换成 **bash**，并保留官方终端工具的全部行为。bash 来源**同时支持并可选**：
 
 - **Git for Windows**（`C:\Program Files\Git` 等，默认优先）；
-- **MSYS2**（`C:\msys64` 等，可选 `UCRT64` / `MINGW64` / `CLANG64` / `CLANGARM64` / `MSYS` 环境）。
+- **MSYS2**（`C:\msys64` 等，可选 `UCRT64` / `MINGW64` / `CLANG64` / `CLANGARM64` / `MINGW32` / `MSYS` 环境）。
 
 两套系统的 `MSYSTEM`、`PATH`、环境根不同，插件按“shell profile”区分，而不是只换一个 `bash.exe` 路径。
 
@@ -21,7 +21,7 @@
 - 前台任务可被 `job_kill` 停止；超时转后台（promote）与官方一致。
 - cwd 跟随 `workingDirectory`（会话里的 `cd`）；`tool/result.meta.cwd` 写入真实执行目录。
 - 结果文本、退出码标记、终端卡片、PTC 目录与官方 `tool-bash` 对齐。
-- 设置页一行：路径、自动发现、兼容模式、状态与诊断；配置持久化、简单。
+- 设置页默认只显示 Shell 选择、兼容模式与一行安全提示；路径/自动发现/测试/MSYS2 环境/诊断折叠在“高级与诊断”；配置持久化、简单。
 - 只支持 Windows；非 win32 不注册任何行为。
 
 ### 1.2 非目标
@@ -242,7 +242,7 @@ interface BashProfile {
    - Git：`%ProgramFiles%\Git`、`%ProgramFiles(x86)%\Git`、`%LocalAppData%\Programs\Git`、`C:\Git`、`D:\Git`；
    - MSYS2：`C:\msys64`、`D:\msys64`、`%LocalAppData%\msys64`、`C:\msys32`；
    - Cygwin：`C:\cygwin64`、`C:\cygwin`。
-4. `where.exe git` → 从 `git.exe` 反推安装根与 `bin\bash.exe`；`where.exe bash` → 每一行（排除 WSL 后）识别 flavor。
+4. `where.exe git` → 从 `git.exe` 反推安装根与 `usr\bin\bash.exe`（手填 `bin\bash.exe` 会归一化）；`where.exe bash` → 每一行（排除 WSL 后）识别 flavor。
 5. `PATH` 中每个目录下的 `bash.exe` / `git.exe`。
 
 每个根先识别 flavor（MSYS2 marker 优先：`etc\msys2-release`、`msys2.exe`、`pacman.exe`、`mingw64\bin`；Git marker：`cmd\git.exe`、`mingw64\bin\git.exe`），再枚举 profile。按 `realpath + msystem + flavor` 去重。
@@ -272,7 +272,7 @@ interface BashProfile {
 ### 5.6 环境（按 profile 区分）
 
 - 公共：`NO_COLOR=1`、`TERM=dumb`、`PAGER=cat`、`GIT_PAGER=cat`、`CHERE_INVOKING=1`。
-- **Git for Windows**：`MSYSTEM=MINGW64`；`PATH = <root>\bin;<root>\usr\bin;<inherited>`。
+- **Git for Windows**：`MSYSTEM=MINGW64`；`PATH = <root>\bin;<root>\usr\bin`，再追加存在的 `<root>\ucrt64\bin` / `<root>\mingw64\bin` / `<root>\mingw32\bin`，最后 `<inherited>`。
 - **MSYS2**：`MSYSTEM=<profile.msystem>`；`MSYS2_PATH_TYPE=inherit`；`PATH = <environmentRoot>\bin;<root>\usr\bin;<root>\usr\local\bin;<inherited>`；`MSYS` 环境则 `<root>\usr\bin;<root>\usr\local\bin;<inherited>`。
 - **Cygwin**：不写 `MSYSTEM`；`PATH = <root>\bin;<inherited>`。
 - `dshEnv = ctx.shellEnv.collect(exec)` 最后合并，保证 `DSH_*` 不被覆盖。
@@ -372,7 +372,7 @@ interface BashProfile {
 - `package.json`：
   - `"type":"module"`，`main: "lib/index.js"`，`exports: { ".": ..., "./client": ... }`。
   - `"dsh": { "bundle": { "patch": "./cordis.patch.yml" }, "client": { "platform": "web" } }`。
-  - `"engines": { "node": ">=22", "dsh": ">=0.2.1-0 <0.3.0" }`（含 prerelease）。
+  - `"engines": { "node": "^22.19.0 || >=24.0.0", "dsh": ">=0.2.1-0" }`（含 prerelease；不设上界，靠 compatcheck 探测漂移）。
   - 依赖：`@deepseek-ai/schemastery`；dev：esbuild/typescript/@types。
 - `cordis.patch.yml`：
   ```yaml
@@ -382,9 +382,9 @@ interface BashProfile {
         disabled: !!js process.platform !== 'win32'
   ```
 - 构建：host ESM（`packages: 'external'`）+ client classic CJS wrapper（`window.__ModuleLoader__.load`）+ sourcemap。
-- 安装：`dsh plugin --profile desktop add link:D:/GitHub/dsh-gitbash-new`；重启 DSH；硬刷新浏览器。
-- 卸载：`dsh plugin remove dsh-gitbash`；重启。
-- 升级：改版本 + CHANGELOG；`compatcheck` 对当前 DSH 跑一遍。
+- 安装：`%DSH_CLI% plugin --profile desktop add link:D:/GitHub/dsh-gitbash-new`；`DSH_CLI` 指桌面自带 CLI（`%LOCALAPPDATA%\Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd`），不是 npm 全局 0.1.7；重启 DSH；硬刷新浏览器。
+- 卸载：`%DSH_CLI% plugin --profile desktop remove dsh-gitbash`；重启。
+- 升级：改版本 + CHANGELOG；`compatcheck` 对当前 DSH 跑一遍；重装并重启。
 
 ---
 
@@ -430,5 +430,6 @@ interface BashProfile {
 | Git 子智能体 / 后台 | ✅ child bash、`job/registered`/`job/settled`、`meta.cwd` 全部核对 |
 | 设置 UI | ✅ 实际截图；Shell 下拉切 Git/MSYS2 写入并读回成功 |
 | 后台/子智能体 UI | ✅ 标题栏 `1 个后台任务` / `1 个子智能体`，命令卡/子智能体卡正常（MSYS2 截图） |
+| Git UI 卡片 | ✅ 与 MSYS2 同一 `bash` 契约；事件/`meta.cwd` 逐条核对，未单独截图 |
 
 复跑步骤与原始事件见 [SMOKE.md](SMOKE.md)。测试 profile/端口均为独立实例，不影响桌面会话。

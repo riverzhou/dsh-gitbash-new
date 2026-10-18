@@ -9,7 +9,7 @@
     "url": "git+https://github.com/converk/dsh-gitbash-new.git"
   },
   "engines": {
-    "node": ">=22",
+    "node": "^22.19.0 || >=24.0.0",
     "dsh": ">=0.2.1-0"
   },
   "main": "lib/index.js",
@@ -30,6 +30,7 @@
     "src",
     "cordis.patch.yml",
     "README.md",
+    "README.zh.md",
     "CHANGELOG.md",
     "LICENSE",
     "docs"
