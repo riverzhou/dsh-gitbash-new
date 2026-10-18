@@ -36,20 +36,33 @@
 ## 功能
 
 - **模型目录里只有 `bash`、没有 `pwsh`**：`tools.restrict` 隐藏 pwsh，压掉
-  `tool:pwsh` 提示词，并注册本插件的 `bash`。
-- **两套 shell 一等公民**：Git for Windows（默认优先）与 MSYS2（`UCRT64` /
-  `MINGW64` / `CLANG64` / `CLANGARM64` / `MINGW32` / `MSYS`）。
+  `tool:pwsh` 提示词，并注册本插件的 `bash`。只对新会话生效，旧会话不追溯。
+- **两套 shell、一个选择器**：Git for Windows（默认优先）与 MSYS2（`UCRT64` /
+  `MINGW64` / `CLANG64` / `CLANGARM64` / `MINGW32` / `MSYS`）。发现流程会查
+  注册表、`where.exe`、PATH 与常见安装根目录，用 `bash --version` 校验候选，
+  且不会把 WSL 的 `bash.exe` 当成候选。
 - **与官方 terminal tool 同形的契约**：`description` / `command` / `timeoutMs` /
   `workdir` / `run_in_background` / `sandbox_permissions` / `justification`，
-  以及相同的结果标记与 `meta.cwd`。
+  同时接受 POSIX 与 Windows 形式的 workdir，结果标记（`[exit code: N]` /
+  `[stderr]` / 截断 spill）与终端卡片用的 `meta.cwd` 都保持一致。
 - **后台任务**：`run_in_background` 返回 job id，用 `job_output` 收集、
-  `job_kill` 停止；前台超时会转后台（promote）。
+  `job_kill` 停止；前台超时会转后台（promote），而不是被杀掉。
+- **隔离而非拼凑**：过滤另一套 bash 家族带来的 PATH 条目，`MSYSTEM` 始终与所选
+  profile 一致；Git 的 `bin\bash.exe` launcher 会归一化为 `usr\bin\bash.exe`，
+  确保实际运行的就是你组合出来的环境。
+- **Windows 专有的正确性**：`signalNumber << 8` 的退出编码会归一化为
+  `[killed by signal: SIGTERM]`；继承来的 Windows `PWD` / `OLDPWD` 用 tombstone
+  删除，`pwd` 保持 POSIX。
 - **DSH 原生显示**：终端卡片、标题栏 `1 个后台任务` / `1 个子智能体`、
   job 卡片和子智能体卡片都由 DSH 渲染。插件只注册 `bash` 工具并给出
   `meta.cwd`，不自绘聊天 UI。
 - **紧凑设置页**：自动发现、即时 profile 选择、兼容模式、一行安全提示，
   路径/测试/环境/诊断折叠在“高级与诊断”。
-- **显式安全**：绝不静默放宽权限，详见[安全边界](#安全边界先读)。
+- **显式安全**：绝不静默放宽权限——`workspace-write` 下以完全访问运行并在结果里
+  标注 `[compat: ...]`，`read-only` 拒绝，`strict` 只允许 `danger-full-access`。
+  详见[安全边界](#安全边界先读)。
+- **已验证**：75 个单元/集成用例，加上 Git 与 MSYS2 的真机冒烟（直连、后台、
+  子智能体；设置页浅色与深色）。
 
 ---
 
@@ -476,7 +489,7 @@ WSL 一律排除：`System32\bash.exe`、`Sysnative`、`WindowsApps`、`\\wsl$`�
 pnpm install
 pnpm build        # lib/index.js + lib/client.js
 pnpm check        # tsc --noEmit
-pnpm test         # node:test；69 个用例，含真实 Git/MSYS2（存在时）
+pnpm test         # node:test；75 个用例，含真实 Git/MSYS2（存在时）
 pnpm selftest     # 纯逻辑自测，不需要 DSH
 pnpm compatcheck  # 对已安装 DSH 做契约字符串核对
 ```

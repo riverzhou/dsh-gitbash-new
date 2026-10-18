@@ -40,22 +40,38 @@ usage, the security model, settings, troubleshooting and development.
 
 - **One `bash`, no `pwsh`** in the model tool catalogue: `tools.restrict` hides
   `pwsh`, the `tool:pwsh` prompt section is shadowed, and `tool:bash` is added.
+  The replacement applies to new sessions; existing ones are not retrofitted.
 - **Two shell families, one selector**: Git for Windows (default priority) or
   MSYS2 (`UCRT64`, `MINGW64`, `CLANG64`, `CLANGARM64`, `MINGW32`, `MSYS`).
+  Discovery reads the registry, `where.exe`, PATH and the usual install roots,
+  validates the candidate with `bash --version`, and never proposes WSL's
+  `bash.exe`.
 - **Official tool contract**: `description`, `command`, `timeoutMs`, `workdir`,
-  `run_in_background`, `sandbox_permissions` / `justification`, POSIX paths and
-  the same result markers as the official `tool-bash`.
+  `run_in_background`, `sandbox_permissions` / `justification`, POSIX and
+  Windows-form workdirs, the same `[exit code: N]`, `[stderr]` and truncation
+  spill markers, and `meta.cwd` for the terminal card.
 - **Background work**: `run_in_background` returns a job id; collect with
-  `job_output`, stop with `job_kill`, and foreground calls promote to background
-  on timeout when the job service is available.
+  `job_output`, stop with `job_kill`, and a foreground call past its deadline is
+  promoted to a job instead of being killed.
+- **Isolation instead of improvisation**: PATH entries from the other bash
+  family are filtered out, `MSYSTEM` matches the selected profile, and Git's
+  `bin\bash.exe` launcher is canonicalized to `usr\bin\bash.exe`, so the
+  environment the plugin composes is the one that actually runs.
+- **Windows-specific correctness**: the `signalNumber << 8` exit encoding
+  becomes `[killed by signal: SIGTERM]`, and inherited Windows `PWD` /
+  `OLDPWD` are tombstoned so `pwd` stays POSIX.
 - **Native DSH display**: terminal cards, the `1 background task` /
   `1 subagent` header badges, job cards and subagent cards are rendered by DSH
   itself — the plugin registers a `bash` tool with `meta.cwd`, it does not draw
   its own chat UI.
 - **A compact settings row** with automatic discovery, an instant profile
   selector, compatibility mode, one-line warning and folded diagnostics.
-- **Explicit security**: never silently widens permissions. See
+- **Explicit security**: never silently widens permissions. `workspace-write`
+  runs bash unconfined and labels the result with `[compat: ...]`, `read-only`
+  refuses, and `strict` allows only `danger-full-access`. See
   [Security model](#security-model-read-this-first).
+- **Verified**: 75 unit and integration tests, plus real-machine smoke on Git
+  and MSYS2 (direct, background and subagent calls; light and dark settings UI).
 
 ---
 
@@ -523,7 +539,7 @@ the native UI cards were exercised. Raw events: [docs/SMOKE.md](docs/SMOKE.md).
 pnpm install
 pnpm build        # lib/index.js + lib/client.js
 pnpm check        # tsc --noEmit
-pnpm test         # node:test; 69 tests, including real Git/MSYS2 when present
+pnpm test         # node:test; 75 tests, including real Git/MSYS2 when present
 pnpm selftest     # pure-logic checks, no DSH needed
 pnpm compatcheck  # contract-string check against the installed DSH
 ```
