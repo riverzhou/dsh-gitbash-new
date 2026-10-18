@@ -59,3 +59,10 @@ test('promoted result renders output and hand-off guidance', () => {
   assert.equal(text.startsWith('partial\n[still running after 1000ms; moved to background job bash-0123456789abcdef]'), true)
   assert.equal(text.includes('job_output'), true)
 })
+
+test('a null exit code does not render an invalid exit marker', () => {
+  const text = renderResult({ ...base, exitCode: null, signal: null })
+  assert.equal(text, '(no output)\n[exit status unavailable]')
+  assert.equal(text.includes('[exit code: null]'), false)
+  assert.equal(parseExitStatus(text).unavailable, true)
+})

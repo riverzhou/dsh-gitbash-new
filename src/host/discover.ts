@@ -58,6 +58,16 @@ export function isBashFilename(path: string): boolean {
   return name === 'bash' || name === 'bash.exe'
 }
 
+/** Strip one matching pair of single/double quotes around a user/YAML value. */
+function stripMatchingQuotes(value: string): string {
+  const trimmed = value.trim()
+  if (trimmed.length < 2) return trimmed
+  const first = trimmed[0]
+  const last = trimmed[trimmed.length - 1]
+  if ((first === '"' && last === '"') || (first === "'" && last === "'")) return trimmed.slice(1, -1).trim()
+  return trimmed
+}
+
 /**
  * WSL's bash is not Git Bash and cannot run with this plugin's environment.
  * Exclude the System32/Sysnative/WindowsApps shims and any `\\wsl$` path.
@@ -107,6 +117,12 @@ function winJoin(base: string, ...parts: string[]): string {
 export function deriveRootFromBash(path: string): string | undefined {
   const key = normalizePathKey(path)
   if (key.endsWith('\\usr\\bin\\bash.exe')) return winDirname(winDirname(winDirname(path)))
+  // Some distributions also place bash in an environment bin (ucrt64, …).
+  for (const env of MSYS2_ENVIRONMENTS) {
+    if (env.dir !== '' && key.endsWith(`\\${env.dir}\\bin\\bash.exe`)) {
+      return winDirname(winDirname(winDirname(path)))
+    }
+  }
   if (key.endsWith('\\bin\\bash.exe')) return winDirname(winDirname(path))
   return undefined
 }
@@ -114,10 +130,13 @@ export function deriveRootFromBash(path: string): string | undefined {
 /** Install root of a git.exe path, or undefined. */
 export function deriveRootFromGit(path: string): string | undefined {
   const key = normalizePathKey(path)
-  // Environment-specific layouts first: `\mingw64\bin\git.exe` also ends with
-  // `\bin\git.exe`, but its root is one level higher.
-  if (key.endsWith('\\mingw64\\bin\\git.exe') || key.endsWith('\\mingw32\\bin\\git.exe')) {
-    return winDirname(winDirname(winDirname(path)))
+  // MSYS2 exposes git under usr/bin and under each environment bin. Those
+  // paths also end with `\bin\git.exe`, but their true root is three levels up.
+  if (key.endsWith('\\usr\\bin\\git.exe')) return winDirname(winDirname(winDirname(path)))
+  for (const env of MSYS2_ENVIRONMENTS) {
+    if (env.dir !== '' && key.endsWith(`\\${env.dir}\\bin\\git.exe`)) {
+      return winDirname(winDirname(winDirname(path)))
+    }
   }
   if (key.endsWith('\\cmd\\git.exe')) return winDirname(winDirname(path))
   if (key.endsWith('\\bin\\git.exe')) return winDirname(winDirname(path))
@@ -217,7 +236,7 @@ function makeProfile(
   else if (!isFile(path)) problem = 'bash.exe does not exist'
   if (problem === undefined && flavor === 'msys2') {
     const envRoot = msystem === undefined ? undefined : environmentRootFor(root, msystem)
-    if (envRoot === undefined || !isDirectory(envRoot)) {
+    if (envRoot === undefined || !isDirectory(winJoin(envRoot, 'bin'))) {
       problem = `MSYS2 environment ${msystem ?? '(unknown)'} is not installed (${envRoot ?? 'unknown root'})`
     }
   }
@@ -286,7 +305,7 @@ export function profileFromPath(
   msystem: MsystemSetting,
   probe = false,
 ): ResolveProfileResult {
-  const trimmed = path.trim()
+  const trimmed = stripMatchingQuotes(path)
   if (trimmed.length === 0) return { problem: 'bashPath is empty' }
   if (isBlockedBash(trimmed)) return { problem: 'WSL bash is not supported' }
   if (!isBashFilename(trimmed)) return { problem: 'path must point to bash.exe' }
@@ -307,7 +326,7 @@ export function profileFromPath(
   }
   const selected = msystem === 'auto' ? defaultMsystemFor(root) : msystem
   const envRoot = environmentRootFor(root, selected)
-  if (envRoot === undefined || !isDirectory(envRoot)) {
+  if (envRoot === undefined || !isDirectory(winJoin(envRoot, 'bin'))) {
     return { problem: `MSYS2 environment ${selected} is not installed under ${root}` }
   }
   return { profile: makeProfile('msys2', root, trimmed, selected, probe) }
@@ -441,7 +460,7 @@ export function discoverBash(options: {
   const roots: string[] = []
 
   if (options.savedPath !== undefined && options.savedPath.trim().length > 0) {
-    const root = deriveRootFromBash(options.savedPath)
+    const root = deriveRootFromBash(stripMatchingQuotes(options.savedPath))
     if (root !== undefined) roots.push(root)
   }
   if (full) {

@@ -100,3 +100,23 @@ test('pre-aborted signal refuses to spawn', () => {
   assert.throws(() => createBashExecution(subprocess, profile, { ...request, signal: controller.signal }))
   assert.equal(subprocess.calls.length, 0)
 })
+
+test('startup signature with real stdout is not a startup failure', async () => {
+  const subprocess = createFakeSubprocess({
+    stdout: 'legit\n',
+    stderr: '*** fatal error - user text\n',
+    exitCode: 0,
+  })
+  const execution = createBashExecution(subprocess, profile, request)
+  const result = await execution.result()
+  assert.equal(result.exitCode, 0)
+  assert.equal(result.stderr.text.includes('[bash startup failed:'), false)
+})
+
+test('timeout aborts the spawn signal as well as terminating', async () => {
+  const subprocess = createFakeSubprocess({ autoExit: false })
+  const execution = createBashExecution(subprocess, profile, { ...request, timeoutMs: 20 })
+  const result = await execution.result()
+  assert.equal(result.timedOut, true)
+  assert.equal(subprocess.calls[0].signal?.aborted, true)
+})

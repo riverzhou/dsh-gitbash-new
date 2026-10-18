@@ -26,9 +26,11 @@ test('volatile fields are read through get()', () => {
 
 test('unknown values fall back instead of leaking into the runtime', () => {
   const settings = readSettings({ bashPath: 42, msystem: 'NOT_AN_ENV', compat: 'yolo' })
-  assert.deepEqual(settings, { bashPath: '', msystem: 'auto', compat: 'auto' })
+  // An unknown compatibility string is a safety typo: keep strict, not auto.
+  assert.deepEqual(settings, { bashPath: '', msystem: 'auto', compat: 'strict' })
 })
 
 test('quoted YAML paths are unquoted', () => {
   assert.equal(readSettings({ bashPath: '"C:\\Git\\bin\\bash.exe"' }).bashPath, 'C:\\Git\\bin\\bash.exe')
+  assert.equal(readSettings({ bashPath: "'C:\\Git\\bin\\bash.exe'" }).bashPath, 'C:\\Git\\bin\\bash.exe')
 })

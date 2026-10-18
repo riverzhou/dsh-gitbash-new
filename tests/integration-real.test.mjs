@@ -5,6 +5,7 @@ import { createRealSubprocess } from './helpers/real-subprocess.mjs'
 
 const found = discoverBash({ probe: true, full: true })
 const roots = [...new Set(found.candidates.map(candidate => candidate.root))]
+const expectedPwd = process.cwd().replace(/\\/g, '/').replace(/^([A-Za-z]):/, (_, drive) => `/${drive.toLowerCase()}`)
 const git = found.candidates.find(candidate => candidate.valid && candidate.flavor === 'git')
 const msys2 = found.candidates.find(candidate => candidate.valid && candidate.flavor === 'msys2' && candidate.msystem === 'UCRT64')
   ?? found.candidates.find(candidate => candidate.valid && candidate.flavor === 'msys2')
@@ -29,7 +30,7 @@ for (const [name, profile] of [['Git for Windows', git], ['MSYS2', msys2]]) {
     assert.equal(result.exitCode, 3)
     assert.equal(result.timedOut, false)
     assert.equal(result.stdout.text.includes(`MSYSTEM=${expected}`), true)
-    assert.equal(result.stdout.text.includes('PWD=/d/GitHub/dsh-gitbash-new'), true)
+    assert.equal(result.stdout.text.includes(`PWD=${expectedPwd}`), true)
     assert.equal(result.stderr.text, 'err\n')
     const pathLine = (await run(profile, 'echo "$PATH"')).stdout.text.toLowerCase()
     if (profile.flavor === 'git') assert.equal(pathLine.includes('msys64'), false)

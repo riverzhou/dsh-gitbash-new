@@ -74,6 +74,8 @@ export interface StateView {
   readonly compat: CompatMode
   /** Effective profile after applying `auto`; absent when nothing validates. */
   readonly effective?: BashProfileView
+  /** Why the configured/effective path is unusable, when it is. */
+  readonly problem?: string
   /** Cached profiles, so the row can offer a selector without a scan. */
   readonly candidates: readonly BashProfileView[]
   /** The profile `auto` would pick, when any. */

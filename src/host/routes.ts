@@ -82,6 +82,7 @@ export function registerRoutes(ctx: HostContextLike, deps: RouteDeps): void {
       const settings = deps.readSettings()
       const resolved = resolveEffectiveProfile(settings, deps.cache, false)
       const cached = deps.cache.get()
+      const lastReplace = deps.lastReplace()
       return {
         ok: true,
         platform: process.platform,
@@ -90,10 +91,11 @@ export function registerRoutes(ctx: HostContextLike, deps: RouteDeps): void {
         msystem: settings.msystem,
         compat: settings.compat,
         ...resolved.profile !== undefined ? { effective: toView(resolved.profile) } : {},
+        ...resolved.problem !== undefined ? { problem: resolved.problem } : {},
         candidates: cached.candidates.map(toView),
         ...cached.recommended !== undefined ? { recommended: toView(cached.recommended) } : {},
         capability: deps.capability(),
-        ...deps.lastReplace() !== undefined ? { lastReplace: deps.lastReplace() } : {},
+        ...lastReplace !== undefined ? { lastReplace } : {},
         namespace: SETTINGS_NAMESPACE,
       }
     })

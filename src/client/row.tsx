@@ -223,7 +223,9 @@ export function TerminalToolRow({ t, scope }: TerminalToolRowProps): ReactElemen
         {compat === 'auto' ? t('warningShort') : t('warningStrictShort')}
       </div>
 
-      {state.error !== undefined ? <div style={styles.error}>{state.error}</div> : null}
+      {state.error !== undefined || state.problem !== undefined
+        ? <div style={styles.error}>{state.error ?? state.problem}</div>
+        : null}
 
       <details
         open={advanced}

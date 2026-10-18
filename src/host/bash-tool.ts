@@ -339,7 +339,9 @@ function presentResult(args: unknown, result: ToolResultLike): ToolResultViewLik
   const parsed = parseExitStatus(raw)
   const view: TerminalResultViewLike = 'signal' in parsed
     ? { card: 'terminal', output: parsed.body, signal: parsed.signal }
-    : { card: 'terminal', output: parsed.body, exitCode: parsed.exitCode }
+    : 'unavailable' in parsed
+      ? { card: 'terminal', output: parsed.body }
+      : { card: 'terminal', output: parsed.body, exitCode: parsed.exitCode }
   return view
 }
 
@@ -357,9 +359,22 @@ export function createBashTool(runtime: BashToolRuntime): ToolDefinitionLike {
   const parameters = bashParameters(backgroundEnabled, promote, escalationModes)
   const outputSchema = bashOutputSchema()
 
-  const resolvePolicy = (exec: ToolExecutionLike): SandboxPolicyLike | undefined => {
-    if (runtime.sandboxPolicy === undefined) return undefined
-    return runtime.sandboxPolicy.resolve(exec.agent !== undefined ? { session: exec.agent.session } : {})
+  const resolvePolicy = (exec: ToolExecutionLike): SandboxPolicyLike => {
+    if (runtime.sandboxPolicy === undefined) {
+      throw new Error(
+        'sandbox policy service is unavailable; refusing to run bash without a known session mode '
+        + '(read-only / workspace-write / danger-full-access)',
+      )
+    }
+    const resolved = runtime.sandboxPolicy.resolve(exec.agent !== undefined ? { session: exec.agent.session } : {})
+    const validModes: readonly SandboxMode[] = ['read-only', 'workspace-write', 'danger-full-access']
+    if (resolved === undefined || resolved === null || !validModes.includes(resolved.mode as SandboxMode)) {
+      throw new Error(
+        'sandbox policy is unavailable or invalid; refusing to run bash without a known session mode '
+        + '(read-only / workspace-write / danger-full-access)',
+      )
+    }
+    return resolved
   }
 
   const resolveCwd = async (exec: ToolExecutionLike): Promise<string> => {
@@ -367,7 +382,8 @@ export function createBashTool(runtime: BashToolRuntime): ToolDefinitionLike {
     if (exec.agent !== undefined && runtime.workingDirectory !== undefined) {
       try {
         cwd = await runtime.workingDirectory.ensure(exec.agent, exec.signal)
-      } catch {
+      } catch (error) {
+        if (exec.signal.aborted || (error instanceof Error && error.name === 'AbortError')) throw toolAborted()
         cwd = undefined
       }
     }
@@ -423,10 +439,20 @@ export function createBashTool(runtime: BashToolRuntime): ToolDefinitionLike {
   }
 
   const stopJob = async (registry: JobRegistryLike, id: string, owner: string | undefined): Promise<JobViewLike> => {
-    registry.kill(id, owner, 'tool call aborted')
+    try {
+      registry.kill(id, owner, 'tool call aborted')
+    } catch {
+      // The job may already be gone; the wait below decides its state.
+    }
     try {
       const settled = await registry.wait(id, 10_000, owner)
-      if (settled.status !== 'running' && settled.status !== 'stopping') registry.remove(id, owner)
+      if (settled.status !== 'running' && settled.status !== 'stopping') {
+        try {
+          registry.remove(id, owner)
+        } catch {
+          // Cleanup is best-effort; the process is already settled.
+        }
+      }
       return settled
     } catch {
       return { id, kind: 'bash', label: '', status: 'killed', startedAt: Date.now(), output: { total: 0, earliest: 0 } }
@@ -446,9 +472,10 @@ export function createBashTool(runtime: BashToolRuntime): ToolDefinitionLike {
     let view: JobViewLike
     try {
       view = await registry.wait(attached.id, timeoutMs, owner, exec.signal)
-    } catch {
+    } catch (error) {
       await stopJob(registry, attached.id, owner)
-      throw toolAborted()
+      if (exec.signal.aborted || (error instanceof Error && error.name === 'AbortError')) throw toolAborted()
+      throw error instanceof Error ? error : new Error(String(error))
     }
     if (view.status === 'running' || view.status === 'stopping') {
       if (attached.process() === undefined) {
@@ -489,7 +516,11 @@ export function createBashTool(runtime: BashToolRuntime): ToolDefinitionLike {
       }
       return promoted
     }
-    registry.remove(attached.id, owner)
+    try {
+      registry.remove(attached.id, owner)
+    } catch {
+      // The registry may have removed the settled job itself.
+    }
     const process = attached.process()
     if (process === undefined) throw new Error(view.detail ?? 'the bash job failed before its process was published')
     const result = await process.result()
@@ -526,7 +557,7 @@ export function createBashTool(runtime: BashToolRuntime): ToolDefinitionLike {
     async execute(rawArgs: Record<string, unknown>, exec: ToolExecutionLike): Promise<BashValue> {
       const args = parseArgs(rawArgs)
       const standingPolicy = resolvePolicy(exec)
-      const standingMode: SandboxMode = standingPolicy?.mode ?? 'danger-full-access'
+      const standingMode: SandboxMode = standingPolicy.mode
       validateBashArgs(args, standingMode)
       if (args.sandbox_permissions !== undefined && escalationModes.length === 0) {
         throw new Error('sandbox_permissions is not available in this composition (no sandboxing executor to escalate)')

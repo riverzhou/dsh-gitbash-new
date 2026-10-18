@@ -34,6 +34,8 @@ test('resolveWorkdir accepts Windows, POSIX-drive, relative, and rejects unmappe
   assert.equal(resolveWorkdir('sub', root), join(root, 'sub'))
   const drive = root.replace(/\\/g, '/').replace(/^([A-Za-z]):/, '/$1')
   assert.equal(resolveWorkdir(drive, root), root)
+  assert.equal(resolveWorkdir(`"${root}"`, undefined), root)
+  assert.equal(resolveWorkdir(`'${root}'`, undefined), root)
   assert.throws(() => resolveWorkdir('/home/river', root), /absolute POSIX path/)
   assert.throws(() => resolveWorkdir(join(root, 'missing'), root), /does not exist/)
 })
@@ -76,8 +78,42 @@ test('foreign roots are excluded from PATH', () => {
   assert.equal(path, 'C:\\Git\\bin;C:\\Git\\usr\\bin;C:\\Tools')
 })
 
+test('cross-drive static guards still exclude MSYS2/Git', () => {
+  const git = profile()
+  const gitPath = composePath(git, 'D:\\msys64\\usr\\bin;E:\\msys64\\usr\\bin;C:\\Tools')
+  assert.equal(gitPath.includes('msys64'), false)
+  const msys = profile({
+    id: 'msys',
+    flavor: 'msys2',
+    root: 'C:\\msys64',
+    path: 'C:\\msys64\\usr\\bin\\bash.exe',
+    msystem: 'UCRT64',
+    environmentRoot: 'C:\\msys64\\ucrt64',
+    label: 'MSYS2 UCRT64',
+  })
+  const msysPath = composePath(msys, 'D:\\Program Files\\Git\\bin;C:\\Tools')
+  assert.equal(msysPath.toLowerCase().includes('git'), false)
+})
+
 test('composeEnv lets the managed DSH_* snapshot win', () => {
   const env = composeEnv(profile(), { PATH: 'C:\\Windows' }, { DSH_HOME: 'C:\\Users\\River\\.dsh' })
   assert.equal(env.DSH_HOME, 'C:\\Users\\River\\.dsh')
   assert.equal(env.MSYSTEM, 'MINGW64')
+})
+
+test('a Cygwin profile keeps its own bin and filters foreign roots', () => {
+  const root = String.raw`C:\cygwin`
+  const cygwin = profile({
+    id: 'cyg',
+    flavor: 'cygwin',
+    root,
+    path: `${root}\\bin\\bash.exe`,
+    msystem: undefined,
+    label: 'Cygwin',
+  })
+  const path = composePath(cygwin, `${root}\\bin;D:\\msys64\\usr\\bin;C:\\Windows`)
+  const parts = path.split(';')
+  assert.equal(parts.includes(`${root}\\bin`), true)
+  assert.equal(parts.includes('C:\\Windows'), true)
+  assert.equal(path.toLowerCase().includes('msys64'), false)
 })

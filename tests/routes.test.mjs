@@ -21,7 +21,7 @@ const cache = {
   refresh: () => ({ candidates: [profile], recommended: profile, notes: ['scanned'] }),
 }
 
-function harness() {
+function harness(overrideSettings = settings) {
   const routes = []
   const ctx = {
     get(name) {
@@ -32,7 +32,7 @@ function harness() {
     effect(callback) { callback() },
   }
   registerRoutes(ctx, {
-    readSettings: () => settings,
+    readSettings: () => overrideSettings,
     cache,
     settingsAvailable: () => true,
     capability: () => ({ supported: true, backgroundJobs: true, bashAvailable: true, shellSandboxMode: 'workspace-write' }),
@@ -77,4 +77,15 @@ test('validate accepts a bad body without throwing', async () => {
   const body = await response.json()
   assert.equal(body.ok, true)
   assert.equal(body.problem, 'bashPath is empty')
+})
+
+test('state exposes why a configured path is unusable', async () => {
+  const { routes } = harness({ bashPath: String.raw`C:\missing\bash.exe`, msystem: 'auto', compat: 'auto' })
+  const state = routes.find(route => route.path === ROUTE_STATE)
+  const response = await state.fetch(new Request('http://x/', { method: 'POST', body: '{}' }))
+  const body = await response.json()
+  assert.equal(body.ok, true)
+  assert.equal(body.effective, undefined)
+  assert.match(body.problem, /does not exist/)
+  assert.equal(body.candidates.length, 1)
 })

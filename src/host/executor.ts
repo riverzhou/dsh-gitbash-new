@@ -46,6 +46,8 @@ export interface BashExecution {
   readonly status: 'running' | 'completed' | 'killed'
   readonly exitCode: number | null
   readonly signal: NodeJS.Signals | null
+  /** MSYS2 startup failure detected from stderr and converted to a failure. */
+  readonly startupFailure?: string
   readonly observed: BashObserved
   readonly done: Promise<void>
   kill(): void
@@ -119,6 +121,7 @@ export function createBashExecution(
   let aborted = false
   let externalKill = false
   let finished = false
+  let startupFailure: string | undefined
   let providerError: unknown
   let stdoutOffset = 0
   let stderrOffset = 0
@@ -128,6 +131,11 @@ export function createBashExecution(
   const stderr = handle.collected.stderr ?? EMPTY_READER
 
   const stop = (): void => {
+    try {
+      controller.abort()
+    } catch {
+      // Aborting the spawn signal is best-effort; terminate is the fallback.
+    }
     try {
       handle.terminate()
     } catch {
@@ -162,10 +170,21 @@ export function createBashExecution(
       const outcome = await handle.done
       exitCode = outcome.exitCode
       signal = outcome.signal
+      // Startup failures can masquerade as exit 0 with no stdout. Detect them
+      // here (not only in result()) so jobs report the same failure.
+      if ((exitCode === 0 || exitCode === null) && stdout.readFrom(0).text.length === 0) {
+        const failure = detectStartupFailure(stderr.readFrom(0).text)
+        if (failure !== undefined) {
+          startupFailure = failure
+          exitCode = 1
+        }
+      }
       if (timedOut || aborted || externalKill || outcome.signal !== null) status = 'killed'
       else status = 'completed'
     } catch (error) {
-      providerError = error
+      // Aborting the spawn signal can make the provider reject `done`; that is
+      // the expected cancellation path, not a spawn failure.
+      if (!timedOut && !aborted && !externalKill) providerError = error
       status = 'killed'
     } finally {
       finished = true
@@ -178,6 +197,7 @@ export function createBashExecution(
     get status() { return status },
     get exitCode() { return exitCode },
     get signal() { return signal },
+    get startupFailure() { return startupFailure },
     observed: { stdout, stderr },
     done,
     kill() {
@@ -206,16 +226,13 @@ export function createBashExecution(
       }
       const out = collect(stdout)
       let err = collect(stderr)
-      const startupFailure = detectStartupFailure(err.text)
-      let effectiveExit = exitCode
       if (startupFailure !== undefined) {
         err = { ...err, text: `${err.text}\n[bash startup failed: ${startupFailure}]` }
-        if (effectiveExit === 0 || effectiveExit === null) effectiveExit = 1
       }
       const value: ForegroundValue = {
         kind: 'foreground',
         cwd: request.cwd,
-        exitCode: effectiveExit,
+        exitCode,
         signal,
         timedOut,
         aborted,

@@ -21,6 +21,7 @@ export interface RowState {
   readonly platform: string
   readonly config: RowConfig
   readonly effective?: BashProfileView
+  readonly problem?: string
   readonly capability: CapabilityView
   readonly lastReplace?: ReplaceView
   readonly candidates: readonly BashProfileView[]
@@ -77,11 +78,21 @@ function shallowEqual(a: object, b: object): boolean {
   return true
 }
 
+/** Normalize a path shown in the form (strip one matching quote pair). */
+function normalizeConfigPath(value: string): string {
+  const trimmed = value.trim()
+  if (trimmed.length < 2) return trimmed
+  const first = trimmed[0]
+  const last = trimmed[trimmed.length - 1]
+  if ((first === '"' && last === '"') || (first === "'" && last === "'")) return trimmed.slice(1, -1).trim()
+  return trimmed
+}
+
 /** Normalize a form value into the config the row uses. */
 function configOf(value: unknown): RowConfig {
   const record = typeof value === 'object' && value !== null ? value as Record<string, unknown> : {}
   return {
-    bashPath: typeof record.bashPath === 'string' ? record.bashPath : '',
+    bashPath: typeof record.bashPath === 'string' ? normalizeConfigPath(record.bashPath) : '',
     msystem: typeof record.msystem === 'string' ? record.msystem as MsystemSetting : 'auto',
     compat: typeof record.compat === 'string' ? record.compat as CompatMode : 'auto',
   }
@@ -129,9 +140,11 @@ export function createRowController(scope: SettingsScopeLike<RowConfig> | undefi
         compat: state.compat,
       },
       ...(state.effective !== undefined ? { effective: state.effective } : { effective: undefined }),
+      ...(state.problem !== undefined ? { problem: state.problem } : { problem: undefined }),
       candidates: state.candidates.length > 0 ? state.candidates : store.getState().candidates,
       ...(state.recommended !== undefined ? { recommended: state.recommended } : {}),
       discovered: true,
+      error: undefined,
       capability: state.capability,
       ...(state.lastReplace !== undefined ? { lastReplace: state.lastReplace } : { lastReplace: undefined }),
     })
@@ -149,6 +162,7 @@ export function createRowController(scope: SettingsScopeLike<RowConfig> | undefi
   }
 
   const start = (): (() => void) => {
+    disposed = false
     const unsubscribers: (() => void)[] = []
     if (scope !== undefined) {
       const sync = (): void => {
@@ -173,9 +187,23 @@ export function createRowController(scope: SettingsScopeLike<RowConfig> | undefi
     if (scope === undefined) throw new Error('settings form unavailable')
     store.setState({ saving: true, error: undefined })
     try {
-      for (const [key, value] of Object.entries(patch)) {
-        const result = await scope.set(key, value)
-        if (result === false) throw new Error(`the host rejected the ${key} update`)
+      const entries = Object.entries(patch) as [keyof RowConfig, RowConfig[keyof RowConfig]][]
+      if (entries.length > 0) {
+        // path + msystem must change together; one accepted write prevents a
+        // path/env mismatch when a revision conflicts between two calls.
+        if (typeof scope.mutate === 'function') {
+          const accepted = await scope.mutate(entries.map(([key, value]) => ({
+            op: 'set' as const,
+            path: [key],
+            value,
+          })))
+          if (accepted === false) throw new Error('the host rejected the settings update')
+        } else {
+          for (const [key, value] of entries) {
+            const result = await scope.set(key, value)
+            if (result === false) throw new Error(`the host rejected the ${key} update`)
+          }
+        }
       }
       store.setState({ config: { ...store.getState().config, ...patch }, saving: false, notice: undefined })
       await refresh()
@@ -206,6 +234,9 @@ export function createRowController(scope: SettingsScopeLike<RowConfig> | undefi
         ...result.recommended !== undefined ? { recommended: result.recommended } : { recommended: undefined },
         ...result.notes.length > 0 ? { notice: result.notes.join('; ') } : {},
       })
+      // Pick up a newly discovered effective profile as well as the candidate
+      // list; Refresh should leave the badge and diagnostics in sync.
+      await refresh()
     } catch (error) {
       if (disposed) return
       store.setState({ discovering: false, error: messageOf(error) })

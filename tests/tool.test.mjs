@@ -175,3 +175,52 @@ test('presentCall and presentResult keep the terminal card contract', () => {
   assert.equal(result.output, 'hi')
   assert.equal(result.exitCode, 2)
 })
+
+test('an invalid/absent sandbox policy resolution fails closed', async () => {
+  const subprocess = createFakeSubprocess({ stdout: 'ran\n' })
+  const tool = createBashTool(runtime({ subprocess, sandboxPolicy: { resolve: () => undefined } }))
+  await assert.rejects(
+    tool.execute({ command: 'echo ran', description: 'run' }, execution()),
+    /sandbox policy is unavailable or invalid/,
+  )
+  assert.equal(subprocess.calls.length, 0)
+})
+
+test('a background startup failure is reported as failed', async () => {
+  const subprocess = createFakeSubprocess({
+    stderr: '*** fatal error - CreateFileMapping, Win32 error 5\n',
+    exitCode: 0,
+  })
+  const jobs = createFakeJobs('background')
+  const tool = createBashTool(runtime({ subprocess, jobs }))
+  await tool.execute({ command: 'x', description: 'y', run_in_background: true }, execution())
+  const outcome = await jobs.hooks().done
+  assert.equal(outcome.status, 'failed')
+  assert.match(outcome.detail, /bash startup failed/)
+})
+
+test('a registry wait error stays an error, and a kill error does not mask it', async () => {
+  const subprocess = createFakeSubprocess({ stdout: 'hi\n' })
+  const jobs = {
+    start() { return 'job' },
+    async wait() { throw new Error('registry boom') },
+    read() { return { chunks: [], lossy: false, job: {} } },
+    kill() { throw new Error('kill boom') },
+    remove() {},
+  }
+  const tool = createBashTool(runtime({ subprocess, jobs }))
+  await assert.rejects(
+    tool.execute({ command: 'x', description: 'y' }, execution()),
+    error => error.name === 'Error' && error.message === 'registry boom',
+  )
+})
+
+test('a missing sandbox policy service also fails closed', async () => {
+  const subprocess = createFakeSubprocess({ stdout: 'ran\n' })
+  const tool = createBashTool({ subprocess, profile, compat: 'auto' })
+  await assert.rejects(
+    tool.execute({ command: 'echo ran', description: 'run' }, execution()),
+    /sandbox policy service is unavailable/,
+  )
+  assert.equal(subprocess.calls.length, 0)
+})

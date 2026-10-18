@@ -43,10 +43,14 @@ export const Config = z.object({
   compat: z.union(COMPAT_MODES).default(SETTINGS_DEFAULTS.compat).volatile(),
 })
 
-/** Strip the whitespace and YAML quotes a hand-edited patch may carry. */
+/** Strip the whitespace and matching YAML quotes a hand-edited patch may carry. */
 export function normalizeBashPath(value: string): string {
   const trimmed = value.trim()
-  if (trimmed.length >= 2 && trimmed.startsWith('"') && trimmed.endsWith('"')) return trimmed.slice(1, -1)
+  if (trimmed.length >= 2) {
+    const first = trimmed[0]
+    const last = trimmed[trimmed.length - 1]
+    if ((first === '"' && last === '"') || (first === "'" && last === "'")) return trimmed.slice(1, -1).trim()
+  }
   return trimmed
 }
 
@@ -74,8 +78,12 @@ export function resolveSettings(input: unknown): TerminalToolSettings {
     msystem: typeof rawMsystem === 'string' && (MSYSTEM_SETTINGS as readonly string[]).includes(rawMsystem)
       ? (rawMsystem as MsystemSetting)
       : SETTINGS_DEFAULTS.msystem,
-    compat: typeof rawCompat === 'string' && (COMPAT_MODES as readonly string[]).includes(rawCompat)
-      ? (rawCompat as CompatMode)
+    // An unknown non-empty mode is a typo/old value: keep the safer `strict`
+    // rather than silently weakening an intended strict deployment to auto.
+    compat: typeof rawCompat === 'string'
+      ? (COMPAT_MODES as readonly string[]).includes(rawCompat)
+        ? rawCompat as CompatMode
+        : rawCompat.trim().length > 0 ? 'strict' : SETTINGS_DEFAULTS.compat
       : SETTINGS_DEFAULTS.compat,
   }
 }

@@ -58,6 +58,16 @@ function pathKey(path: string): string {
   return normalize(path).replaceAll('/', '\\').toLowerCase()
 }
 
+/** Strip one matching pair of single/double quotes from a PATH entry. */
+function stripMatchingQuotes(value: string): string {
+  const trimmed = value.trim()
+  if (trimmed.length < 2) return trimmed
+  const first = trimmed[0]
+  const last = trimmed[trimmed.length - 1]
+  if ((first === '"' && last === '"') || (first === "'" && last === "'")) return trimmed.slice(1, -1).trim()
+  return trimmed
+}
+
 /** True when `entry` is `root` or below it. */
 function underRoot(entry: string, root: string): boolean {
   const key = pathKey(entry)
@@ -80,19 +90,24 @@ export function composePath(
   const seen = new Set<string>()
   const out: string[] = []
   const push = (entry: string): void => {
-    const trimmed = entry.trim().replace(/^"|"$/g, '')
+    const trimmed = stripMatchingQuotes(entry)
     if (trimmed.length === 0) return
     const key = pathKey(trimmed)
     if (seen.has(key)) return
     if (foreignRoots.some(root => underRoot(trimmed, root))) return
-    // Static guards for standard installs the cache did not enumerate.
-    if (profile.flavor === 'git' && (key.startsWith('c:\\msys64\\') || key.startsWith('c:\\msys32\\') || key.startsWith('c:\\cygwin'))) return
-    if (profile.flavor === 'msys2') {
-      if (key.startsWith('c:\\program files\\git\\')) return
-      // Keep only this MSYS2 environment's own bin dirs; drop sibling envs.
-      if (underRoot(trimmed, profile.root) && ![...selected].some(prefix => key === prefix)) return
-    }
-    if (profile.flavor === 'cygwin' && (key.startsWith('c:\\program files\\git\\') || key.startsWith('c:\\msys64\\') || key.startsWith('c:\\msys32\\'))) return
+    // Static guards for standard installs the cache did not enumerate. Match
+    // the install directory on any drive, not only C:.
+    const underSelected = underRoot(trimmed, profile.root)
+    const msysRoot = !underSelected && (
+      key.includes('\\msys64\\') || key.includes('\\msys32\\')
+      || key.includes('\\cygwin\\') || key.includes('\\cygwin64\\') || key.includes('\\cygwin32\\')
+      || key.endsWith('\\cygwin') || key.endsWith('\\cygwin64') || key.endsWith('\\cygwin32')
+    )
+    if (profile.flavor === 'git' && msysRoot) return
+    if (profile.flavor === 'msys2' && key.includes('\\program files\\git\\')) return
+    if (profile.flavor === 'cygwin' && (msysRoot || key.includes('\\program files\\git\\'))) return
+    // Keep only this MSYS2 environment's own bin dirs; drop sibling envs.
+    if (profile.flavor === 'msys2' && underRoot(trimmed, profile.root) && ![...selected].some(prefix => key === prefix)) return
     seen.add(key)
     out.push(trimmed)
   }
@@ -176,7 +191,7 @@ export function resolveWorkdir(requested: string | undefined, sessionCwd: string
     const base = sessionCwd !== undefined && sessionCwd.length > 0 ? sessionCwd : process.cwd()
     return assertDirectory(base)
   }
-  const value = requested.trim().replace(/^"|"$/g, '')
+  const value = stripMatchingQuotes(requested)
   let windows: string | undefined
   if (isWindowsAbsolute(value)) {
     windows = value

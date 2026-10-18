@@ -27,9 +27,14 @@ test('install roots derive from both Git and MSYS2 layouts', () => {
   assert.equal(deriveRootFromBash('C:\\Program Files\\Git\\bin\\bash.exe'), 'C:\\Program Files\\Git')
   assert.equal(deriveRootFromBash('C:\\Program Files\\Git\\usr\\bin\\bash.exe'), 'C:\\Program Files\\Git')
   assert.equal(deriveRootFromBash('C:\\msys64\\usr\\bin\\bash.exe'), 'C:\\msys64')
+  assert.equal(deriveRootFromBash('C:\\msys64\\ucrt64\\bin\\bash.exe'), 'C:\\msys64')
   assert.equal(deriveRootFromBash('C:\\random\\bash.exe'), undefined)
   assert.equal(deriveRootFromGit('C:\\Program Files\\Git\\cmd\\git.exe'), 'C:\\Program Files\\Git')
   assert.equal(deriveRootFromGit('C:\\Program Files\\Git\\mingw64\\bin\\git.exe'), 'C:\\Program Files\\Git')
+  assert.equal(deriveRootFromGit('C:\\Program Files\\Git\\ucrt64\\bin\\git.exe'), 'C:\\Program Files\\Git')
+  assert.equal(deriveRootFromGit('C:\\msys64\\ucrt64\\bin\\git.exe'), 'C:\\msys64')
+  assert.equal(deriveRootFromGit('C:\\msys64\\clang64\\bin\\git.exe'), 'C:\\msys64')
+  assert.equal(deriveRootFromGit('C:\\msys64\\usr\\bin\\git.exe'), 'C:\\msys64')
 })
 
 test('bash version parsing', () => {
@@ -65,6 +70,8 @@ test('Git for Windows root produces one MINGW64 profile', t => {
   // normalize to the usr\bin runtime.
   const fromBin = profileFromPath(join(root, 'bin', 'bash.exe'), 'auto')
   assert.equal(fromBin.profile?.path, join(root, 'usr', 'bin', 'bash.exe'))
+  const quoted = profileFromPath(`"${join(root, 'bin', 'bash.exe')}"`, 'auto')
+  assert.equal(quoted.profile?.path, join(root, 'usr', 'bin', 'bash.exe'))
 })
 
 test('MSYS2 root enumerates environments and picks UCRT64 by default', t => {

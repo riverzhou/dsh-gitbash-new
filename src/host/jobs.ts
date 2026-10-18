@@ -23,10 +23,16 @@ export function processSources(proc: () => Pick<BashExecution, 'observed'> | und
 
 /** Map a settled execution onto the job outcome vocabulary. */
 export function processOutcome(proc: BashExecution): JobOutcomeLike {
+  if (proc.startupFailure !== undefined) {
+    return { status: 'failed', detail: `bash startup failed: ${proc.startupFailure}` }
+  }
   if (proc.status === 'killed') {
     return { status: 'killed', detail: proc.signal !== null ? `signal: ${proc.signal}` : 'killed before exit' }
   }
-  return { status: 'completed', detail: `exit code: ${proc.exitCode ?? 0}` }
+  return {
+    status: 'completed',
+    detail: proc.exitCode === null ? 'exit status unavailable' : `exit code: ${proc.exitCode}`,
+  }
 }
 
 /**

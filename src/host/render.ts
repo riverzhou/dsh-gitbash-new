@@ -81,11 +81,13 @@ export function compatNote(value: { compat?: boolean; sessionMode?: string }): s
  * Split the rendered text into the output body and the terminal exit status.
  * The consumed marker is removed because the card shows it as a pill.
  */
-export function parseExitStatus(text: string): { body: string } & ({ exitCode: number } | { signal: string }) {
+export function parseExitStatus(text: string): { body: string } & ({ exitCode: number } | { signal: string } | { unavailable: true }) {
   const signal = /\n\[killed by signal: ([^\]\n]+)\]$/.exec(text)
   if (signal?.[1] !== undefined) return { body: text.slice(0, signal.index), signal: signal[1] }
   const exit = /\n\[exit code: (\d+)\]$/.exec(text)
   if (exit?.[1] !== undefined) return { body: text.slice(0, exit.index), exitCode: Number(exit[1]) }
+  const unavailable = /\n\[exit status unavailable\]$/.exec(text)
+  if (unavailable !== null) return { body: text.slice(0, unavailable.index), unavailable: true }
   return { body: text, exitCode: 0 }
 }
 
@@ -105,6 +107,7 @@ export function renderResult(result: ForegroundValue): string {
   if (result.timedOut) notes.push(`[timed out after ${result.timeoutMs}ms]`)
   if (result.stopped !== undefined) notes.push(`[stopped: ${result.stopped}]`)
   if (result.signal !== null) notes.push(`[killed by signal: ${result.signal}]`)
+  else if (result.exitCode === null) notes.push('[exit status unavailable]')
   else if (result.exitCode !== 0) notes.push(`[exit code: ${result.exitCode}]`)
   if (notes.length === 0) return body
   if (!body.endsWith('\n')) body += '\n'
