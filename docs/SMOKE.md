@@ -204,3 +204,35 @@ MSYS2 子智能体同样走 `subagent` → child `964108f7-...` → `bash` → `
 - 截图：`docs/images/ui-session-summary.png`、`ui-background-card.png`、`ui-subagent-card.png`。
 - Git 的 UI 卡片未单独截图；工具名、参数、结果标记、`meta.cwd` 与 MSYS2 完全同形
   （同一 `bash` 工具定义），事件层已逐条核对。
+
+---
+
+## 追加：Windows 信号与 `PWD` 回归（2026-10-18 09:2x）
+
+测试 profile `gitbash-uitest`（web 模板 + `dsh-context` + `dshmarket` +
+`link:D:/GitHub/dsh-gitbash-new`），端口 `56023`；设置页选 **MSYS2 UCRT64**，
+会话权限 `workspace-write`。修复前同一命令的真机结果为：
+
+- 直连：`PWD=D:/GitHub/dsh-gitbash-new`，最后一行 `[exit code: 3840]`；
+- 后台：job 状态 `completed, exit code: 3840`（应为 `killed, signal: SIGTERM`）。
+
+修复后（重新 `pnpm build` 并重启测试 profile）逐字结果：
+
+```text
+# 直连：printf 'PWD=%s\n' "$PWD"; pwd; echo DIRECT_BEFORE; kill -TERM $$
+PWD=/d/GitHub/dsh-gitbash-new
+/d/GitHub/dsh-gitbash-new
+DIRECT_BEFORE
+[compat: bash runs outside the DSH file sandbox (session mode workspace-write)]
+[killed by signal: SIGTERM]
+
+# 后台：echo BG_BEFORE; sleep 1; kill -TERM $$
+job bash-edc3acd9ffda4f1d
+BG_BEFORE
+[status: killed, signal: SIGTERM]
+```
+
+- 直连/后台/子智能体均保持 `MSYSTEM=UCRT64`；`workspace-write` 的 compat 尾注仍在。
+- `pnpm test` 74/74（新增真实 Git Bash 信号、宿主 Windows `PWD` 回归）。
+- 未覆盖：`SIGQUIT`（`kill -QUIT $$` 在 Git Bash 下正常退出 0，不构成信号编码样本）；
+  read-only/strict 的实机拒绝仍由既有单测覆盖。

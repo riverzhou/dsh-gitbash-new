@@ -3,6 +3,26 @@
 All notable changes to this project are documented here. One version per
 entry; the Git history is the evidence.
 
+## Unreleased
+
+### Fixed
+
+- **Windows signal exits**: MSYS2/Git Bash encode death-by-signal as
+  `signalNumber << 8` in the Windows exit code (`kill -TERM $$` → 3840,
+  `kill -KILL $$` → 2304), while Node reports `signal: null` on Windows. The
+  executor normalizes that encoding, so a foreground result now ends with
+  `[killed by signal: SIGTERM]` and a background job settles as
+  `killed, signal: SIGTERM` instead of `[exit code: 3840]` / `completed`.
+  Normal bash exits are masked to 0..255; non-multiples of 256 (for example
+  `0xC0000005`) stay exit codes.
+- **Stale `PWD`/`OLDPWD`**: the host process can export a Windows `PWD`
+  (`D:\work`). Bash trusts it when it matches the cwd and then reports a
+  Windows-form `$PWD`, so `pwd` returned `D:/...` in an MSYS2 session. The
+  composed child environment now carries explicit `undefined` tombstones for
+  both variables; bash derives the POSIX path from the real cwd.
+- Tests: 74 (up from 69), including a real Git Bash signal regression, a
+  Windows-PWD/`$PWD` regression, and fake-provider normalization cases.
+
 ## 0.2.1 — 2026-10-18
 
 Audit-fix release. The package is now licensed under **GPL-3.0-only** (was

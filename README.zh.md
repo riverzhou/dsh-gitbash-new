@@ -419,6 +419,7 @@ WSL 一律排除：`System32\bash.exe`、`Sysnative`、`WindowsApps`、`\\wsl$`�
 | 后台任务不可用 | preset 没有组合 `ctx.jobs`；用标准 Web preset，或前台加超时 |
 | 找不到 `job_kill` / `job_output` | 它们是 DSH 的独立工具，不属于 bash；确认 jobs 工具组在 preset 里 |
 | 设置行不显示 | DSH 太旧、插件未加载，或 Web 客户端未重建/刷新；重启并硬刷新 |
+| 找不到 Git/MSYS2 选择，或切换后当前会话没变 | 选择器只在 **设置 → 通用 → 终端工具（Git Bash / MSYS2）**；内置 **终端** 卡片是独立的 UI 终端插件。切换会立即保存，但只对**新会话**生效 |
 | 路径含空格失败 | 填完整路径，不要加引号；表单会原样保存 |
 | WSL 的 bash 不出现 | 有意排除；WSL 不符合本插件的 profile/环境模型 |
 | 输出像被截断 | 长输出只保留尾部；用结果里给的 spill 路径看完整文件 |

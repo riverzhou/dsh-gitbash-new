@@ -50,6 +50,20 @@ test('Git profile composes MINGW64 and prefixes Git paths', () => {
   assert.equal(env.PATH.includes('C:\\Windows\\System32'), true)
 })
 
+test('composeEnv drops inherited PWD/OLDPWD so bash derives POSIX paths', () => {
+  const env = composeEnv(profile(), {
+    PATH: 'C:\\Windows',
+    PWD: 'C:\\work',
+    OLDPWD: 'C:\\old',
+  })
+  // The tombstone must be present: the subprocess service filters undefined
+  // entries, which removes the ambient value instead of re-exporting it.
+  assert.equal(Object.hasOwn(env, 'PWD'), true)
+  assert.equal(Object.hasOwn(env, 'OLDPWD'), true)
+  assert.equal(env.PWD, undefined)
+  assert.equal(env.OLDPWD, undefined)
+})
+
 test('MSYS2 profile composes its MSYSTEM and selected environment first', () => {
   const msys = profile({
     id: 'msys',

@@ -5,6 +5,7 @@
  * cancellation cause, collected-output projection, and the MSYS2 startup
  * failure guard. Jobs, rendering, and the tool layer consume its handle.
  */
+import { constants } from 'node:os'
 import type { BashProfile } from './discover.ts'
 import { detectStartupFailure, type CollectedOutputLike, type ForegroundValue } from './render.ts'
 import type {
@@ -76,6 +77,43 @@ export function clampTimeout(requested: number | undefined): number {
     throw new Error(`invalid timeoutMs: expected a positive number, got ${JSON.stringify(requested)}`)
   }
   return Math.min(requested, EXEC_DEFAULTS.maxTimeoutMs)
+}
+
+/** Signal names for the numeric values `os.constants.signals` exposes. */
+const SIGNAL_NAMES: ReadonlyMap<number, NodeJS.Signals> = (() => {
+  const names = new Map<number, NodeJS.Signals>()
+  for (const [name, number] of Object.entries(constants.signals)) {
+    if (typeof number !== 'number' || number <= 0 || number > 64 || names.has(number)) continue
+    names.set(number, name as NodeJS.Signals)
+  }
+  return names
+})()
+
+/**
+ * Normalize a Windows process outcome.
+ *
+ * MSYS2 and Git Bash encode death-by-signal as `signalNumber << 8` in the
+ * Windows exit code (`kill -TERM $$` → 3840, `kill -KILL $$` → 2304), while
+ * Node always reports `signal: null` on Windows. A normal `exit N` is masked
+ * to 0..255, so a non-zero multiple of 256 is the signal encoding. Without
+ * this, the tool renders `[exit code: 3840]` and jobs look completed.
+ *
+ * @param exitCode - the Windows process exit code, or null when unknown.
+ * @param signal - the provider's signal, null on Windows.
+ * @param platform - override for tests.
+ * @returns a POSIX-shaped exit code or signal name.
+ */
+export function normalizeWindowsExit(
+  exitCode: number | null,
+  signal: NodeJS.Signals | null,
+  platform: NodeJS.Platform = process.platform,
+): { exitCode: number | null; signal: NodeJS.Signals | null } {
+  if (platform !== 'win32' || signal !== null || exitCode === null || exitCode <= 0xFF) {
+    return { exitCode, signal }
+  }
+  if (exitCode % 0x100 !== 0) return { exitCode, signal }
+  const name = SIGNAL_NAMES.get(exitCode >>> 8)
+  return name === undefined ? { exitCode, signal } : { exitCode: null, signal: name }
 }
 
 /** Empty reader used only when the provider drops a requested collect stream. */
@@ -168,8 +206,9 @@ export function createBashExecution(
   const done = (async (): Promise<void> => {
     try {
       const outcome = await handle.done
-      exitCode = outcome.exitCode
-      signal = outcome.signal
+      const normalized = normalizeWindowsExit(outcome.exitCode, outcome.signal)
+      exitCode = normalized.exitCode
+      signal = normalized.signal
       // Startup failures can masquerade as exit 0 with no stdout. Detect them
       // here (not only in result()) so jobs report the same failure.
       if ((exitCode === 0 || exitCode === null) && stdout.readFrom(0).text.length === 0) {
@@ -179,7 +218,7 @@ export function createBashExecution(
           exitCode = 1
         }
       }
-      if (timedOut || aborted || externalKill || outcome.signal !== null) status = 'killed'
+      if (timedOut || aborted || externalKill || signal !== null) status = 'killed'
       else status = 'completed'
     } catch (error) {
       // Aborting the spawn signal can make the provider reject `done`; that is

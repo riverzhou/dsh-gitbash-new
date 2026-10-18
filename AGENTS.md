@@ -16,7 +16,7 @@
 | 源码 / 技术栈 | TypeScript（host ESM + client bundle）+ esbuild；`lib/` 已构建并入库 |
 | 项目定位 | ✅ **已确定并实现**（见 §1；设计见 `docs/DESIGN.md`） |
 | 版本 / 许可 | `0.2.1` / `GPL-3.0-only` |
-| 验证 | `pnpm test` 69/69；`pnpm selftest` 10/10；`pnpm compatcheck` 通过；DSH 0.2.1-rc.2 真机：Git + MSYS2 的 direct/background/subagent、UI 卡片与设置切换均通过（`docs/SMOKE.md`） |
+| 验证 | `pnpm test` 74/74；`pnpm selftest` 10/10；`pnpm compatcheck` 通过；DSH 0.2.1-rc.2 真机：Git + MSYS2 的 direct/background/subagent、UI 卡片与设置切换均通过；Windows 信号与 `PWD` 回归真机通过（`docs/SMOKE.md`） |
 | 平台 | Windows 10（19045）/ Git for Windows 2.56（bash 5.3.15）/ MSYS2 5.3.20（UCRT64） |
 | 运行时 | Node v24.21.0；DSH 桌面运行时 `0.2.1-rc.2` |
 | 已知硬约束 | Git Bash/MSYS2 无法在 DSH Windows ACL 沙箱内启动；兼容模式策略见 §1 与 README |
@@ -116,7 +116,7 @@ dsh-gitbash-new/
 │       └── types.ts       # 客户端契约窄化
 ├── tests/
 │   ├── helpers/           # fake / real subprocess
-│   └── *.test.mjs         # 69 个 node:test 用例（含真实 Git/MSYS2 集成）
+│   └── *.test.mjs         # 74 个 node:test 用例（含真实 Git/MSYS2 集成）
 ├── scripts/
 │   ├── selftest.mjs       # 纯逻辑自测
 │   └── compatcheck.mjs    # 对 app.asar 里的官方产物做契约字符串核对
@@ -194,3 +194,10 @@ dsh-gitbash-new/
 11. **Git 的 `bin\bash.exe` 是 launcher**：会按安装自带的 UCRT64 重置 `MSYSTEM`/PATH，
     覆盖我们传入的 `MINGW64`。`profileFromPath` 必须归一化到 `usr\bin\bash.exe`；
     真机曾因此让 Git 会话显示 `MSYSTEM=UCRT64`。
+12. **Windows 信号编码**：Git Bash/MSYS2 自杀信号在 Windows 退出码里是
+    `signalNumber << 8`（`SIGTERM` → 3840），Node 的 `signal` 恒为 null。
+    `normalizeWindowsExit` 必须把这种码归一化为信号名；正常 `exit N` 被截断到
+    0..255，`0xC0000005` 等崩溃码低位非 0，不能误判。
+13. **`PWD` 继承**：宿主可能导出 Windows `PWD`，bash 会信任它并让 `$PWD`/`pwd`
+    变成 `D:/...`。`composeEnv` 必须用 `PWD: undefined` / `OLDPWD: undefined`
+    tombstone 删除继承值；真机 MSYS2 会话曾出现 `PWD=D:/GitHub/...`。

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { BashSpawnError, createBashExecution } from '../lib/index.js'
+import { BashSpawnError, createBashExecution, normalizeWindowsExit } from '../lib/index.js'
 import { createFakeSubprocess } from './helpers/fake-subprocess.mjs'
 
 const profile = {
@@ -31,6 +31,29 @@ test('normal exit projects collected output and status', async () => {
   assert.equal(execution.status, 'completed')
   assert.deepEqual(subprocess.calls[0].argv, ['C:\\Git\\bin\\bash.exe', '-c', 'echo hi'])
   assert.equal(subprocess.calls[0].cwd, 'C:\\work')
+})
+
+test('Windows signal-encoded exit codes normalize to signal names', () => {
+  assert.deepEqual(normalizeWindowsExit(3840, null, 'win32'), { exitCode: null, signal: 'SIGTERM' })
+  assert.deepEqual(normalizeWindowsExit(2304, null, 'win32'), { exitCode: null, signal: 'SIGKILL' })
+  assert.deepEqual(normalizeWindowsExit(512, null, 'win32'), { exitCode: null, signal: 'SIGINT' })
+  // A normal bash exit is masked to 0..255 and must stay an exit code.
+  assert.deepEqual(normalizeWindowsExit(143, null, 'win32'), { exitCode: 143, signal: null })
+  // Crash codes such as 0xC0000005 are not signal encodings.
+  assert.deepEqual(normalizeWindowsExit(3221225477, null, 'win32'), { exitCode: 3221225477, signal: null })
+  // Do not reinterpret POSIX exit codes.
+  assert.deepEqual(normalizeWindowsExit(3840, null, 'linux'), { exitCode: 3840, signal: null })
+  // A provider-reported signal always wins.
+  assert.deepEqual(normalizeWindowsExit(null, 'SIGTERM', 'win32'), { exitCode: null, signal: 'SIGTERM' })
+})
+
+test('a Windows signal-encoded exit is classified as killed', { skip: process.platform !== 'win32' }, async () => {
+  const subprocess = createFakeSubprocess({ stdout: 'BEFORE\n', exitCode: 3840 })
+  const execution = createBashExecution(subprocess, profile, request)
+  const result = await execution.result()
+  assert.equal(result.exitCode, null)
+  assert.equal(result.signal, 'SIGTERM')
+  assert.equal(execution.status, 'killed')
 })
 
 test('timeout terminates and classifies timedOut', async () => {

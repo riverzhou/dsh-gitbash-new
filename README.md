@@ -462,6 +462,7 @@ UCRT64, you are probably running an older plugin build or a stale session.
 | Background jobs are unavailable | The preset did not compose `ctx.jobs`; use the standard web preset or run in the foreground with a timeout |
 | `job_kill` / `job_output` missing | They are separate DSH tools, not part of bash; ensure the jobs tool group is in the preset |
 | Settings row is missing | DSH too old, plugin not loaded, or the Web client was not rebuilt/refreshed; restart DSH and hard-refresh |
+| Cannot find the Git/MSYS2 selector, or changing it does not affect this session | The selector is only in **Settings → General → Terminal tool (Git Bash / MSYS2)**; the built-in **Terminal** card is the separate UI-terminal plugin. Changes persist immediately but apply to **new sessions** only |
 | Path with spaces fails | Enter the path without surrounding quotes; the settings form stores it verbatim |
 | WSL bash is not listed | Intentional; WSL cannot be driven through this profile/environment model |
 | Output seems cut off | Long output is tail-truncated; use the reported spill path for the full file |

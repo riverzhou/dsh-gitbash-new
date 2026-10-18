@@ -186,6 +186,11 @@ type BashValue =
 - 超时：`onExpiry:'kill'`（无 jobs / 前台）用定时器 + `terminate()`；`onExpiry:'none'`（jobs promote）交给 `jobs.wait`。
 - 首因分类：`timedOut` 与 `aborted` 互斥；abort 先到就是 aborted。
 - 进程结束分类：`signal !== null` → killed；否则 completed。
+- **Windows 信号归一化**：Git Bash/MSYS2 被信号杀死时，Windows 退出码是
+  `signalNumber << 8`（`SIGTERM` → 3840，`SIGKILL` → 2304），而 Node 在 Windows
+  上始终报 `signal: null`。执行器把 `>255` 且低 8 位为 0 的退出码按
+  `os.constants.signals` 反查为信号名，`exitCode` 置 null；正常 bash `exit N`
+  被截断到 0..255，`0xC0000005` 等崩溃码低位非 0，仍按退出码报告。
 - 输出：`readFrom(0)`；`truncated = lossy`；`spillPath` 透传；stdout/stderr 分段合并。
 - **启动失败检测**：exit 0 但 stderr 命中 `*** fatal error - ` / `couldn't create signal pipe` → 视为启动失败（`exitCode` 改 1 + 说明），防止 MSYS2 的 exit-0 假成功。
 - 生成失败（ENOENT/EACCES）→ 明确错误："Git Bash 无法启动：<path>；请在设置里重新发现/校验路径"。
@@ -276,6 +281,10 @@ interface BashProfile {
 - **MSYS2**：`MSYSTEM=<profile.msystem>`；`MSYS2_PATH_TYPE=inherit`；`PATH = <environmentRoot>\bin;<root>\usr\bin;<root>\usr\local\bin;<inherited>`；`MSYS` 环境则 `<root>\usr\bin;<root>\usr\local\bin;<inherited>`。
 - **Cygwin**：不写 `MSYSTEM`；`PATH = <root>\bin;<inherited>`。
 - `dshEnv = ctx.shellEnv.collect(exec)` 最后合并，保证 `DSH_*` 不被覆盖。
+- **清除继承的 `PWD`/`OLDPWD`**：宿主进程可能导出 Windows 形式（如 `D:\work`）；
+  bash 在 cwd 匹配时会信任它，导致 `$PWD`/`pwd` 变成 `D:/...`。`composeEnv`
+  用显式 `undefined` tombstone 让 subprocess 服务删除这两个环境项，由 bash 从真实
+  cwd 推导 POSIX 路径。
 - 不覆盖 `HOME`、`TMP`、`TEMP`、`LANG`（尊重用户 dotfiles 与区域设置）。
 - 若 `msystem` 与 path 的 flavor 不匹配（例如 Git 配 `UCRT64`），**拒绝执行**并提示重新选择，而不是猜。
 

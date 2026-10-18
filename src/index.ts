@@ -116,7 +116,7 @@ function messageOf(error: unknown): string {
 export { Config, readSettings }
 export { discoverBash, createDiscoveryCache, resolveEffectiveProfile, profileFromPath, profilesForRoot, detectFlavor, parseBashVersion, isBlockedBash, deriveRootFromBash, deriveRootFromGit, defaultMsystemFor, environmentRootFor } from './host/discover.ts'
 export { composeEnv, composePath, posixToWindows, resolveWorkdir, ENV_OVERRIDES } from './host/env.ts'
-export { createBashExecution, clampTimeout, EXEC_DEFAULTS, BashSpawnError } from './host/executor.ts'
+export { createBashExecution, clampTimeout, normalizeWindowsExit, EXEC_DEFAULTS, BashSpawnError } from './host/executor.ts'
 export { createBashTool } from './host/bash-tool.ts'
 export { renderResult, renderPromoted, parseExitStatus, compatNote } from './host/render.ts'
 export { approveEscalation, ESCALATION_TARGETS, WIDER_MODES, validateEscalationArgs, sandboxPermissionsDescription, sandboxDenialMarker, escalationHintMarker } from './host/escalation.ts'

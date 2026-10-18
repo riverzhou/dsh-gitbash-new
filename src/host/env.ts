@@ -128,7 +128,12 @@ export function composeEnv(
   dshEnv?: Record<string, string>,
   foreignRoots: readonly string[] = [],
 ): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...ENV_OVERRIDES }
+  // The host process may export a Windows `PWD` (for example `D:\work`). Bash
+  // trusts an inherited `PWD` when it matches the cwd and then reports that
+  // Windows form as `$PWD`/`pwd`, breaking POSIX path expectations. Explicit
+  // `undefined` tombstones make the subprocess service drop the ambient values
+  // so the shell derives the POSIX path from its real cwd.
+  const env: NodeJS.ProcessEnv = { ...ENV_OVERRIDES, PWD: undefined, OLDPWD: undefined }
   if (profile.flavor === 'git') {
     env.MSYSTEM = 'MINGW64'
   } else if (profile.flavor === 'msys2') {

@@ -10,9 +10,9 @@ const git = found.candidates.find(candidate => candidate.valid && candidate.flav
 const msys2 = found.candidates.find(candidate => candidate.valid && candidate.flavor === 'msys2' && candidate.msystem === 'UCRT64')
   ?? found.candidates.find(candidate => candidate.valid && candidate.flavor === 'msys2')
 
-function run(profile, command, timeoutMs = 15000) {
+function run(profile, command, timeoutMs = 15000, inherited = process.env) {
   const foreignRoots = roots.filter(root => root.toLowerCase() !== profile.root.toLowerCase())
-  const env = composeEnv(profile, process.env, undefined, foreignRoots)
+  const env = composeEnv(profile, inherited, undefined, foreignRoots)
   const execution = createBashExecution(createRealSubprocess(), profile, {
     command,
     cwd: process.cwd(),
@@ -37,6 +37,20 @@ for (const [name, profile] of [['Git for Windows', git], ['MSYS2', msys2]]) {
     else assert.equal(pathLine.includes('program files/git'), false)
   })
 }
+
+test('a real signal-terminated bash reports SIGTERM, not exit 3840', { skip: git === undefined }, async () => {
+  const result = await run(git, 'kill -TERM $$')
+  assert.equal(result.exitCode, null)
+  assert.equal(result.signal, 'SIGTERM')
+  assert.equal(result.timedOut, false)
+})
+
+test('a host-exported Windows PWD is removed so $PWD stays POSIX', { skip: git === undefined }, async () => {
+  const inherited = { ...process.env, PWD: process.cwd() }
+  const result = await run(git, 'printf "PWD=%s\\n" "$PWD"; pwd', 15000, inherited)
+  assert.equal(result.stdout.text.includes(`PWD=${expectedPwd}`), true)
+  assert.equal(result.stdout.text.includes(expectedPwd), true)
+})
 
 test('a real foreground timeout is killed and classified', { skip: git === undefined }, async () => {
   const result = await run(git, 'sleep 5', 120)
