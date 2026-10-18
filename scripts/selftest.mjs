@@ -71,7 +71,7 @@ check('render markers', () => {
 
 check('compat note is short and identifiable', () => {
   const note = compatNote({ compat: true, sessionMode: 'workspace-write' })
-  assert.equal(note, '[compat: Git Bash runs outside the DSH file sandbox (session mode workspace-write)]')
+  assert.equal(note, '[compat: bash runs outside the DSH file sandbox (session mode workspace-write)]')
 })
 
 check('PATH never mixes Git into MSYS2', () => {

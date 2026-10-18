@@ -55,6 +55,7 @@ test('state returns settings, effective profile and capability', async () => {
   assert.equal(response.status, 200)
   assert.equal(body.ok, true)
   assert.equal(body.effective.path, 'C:\\Git\\bin\\bash.exe')
+  assert.equal(body.candidates.length, 1)
   assert.equal(body.capability.shellSandboxMode, 'workspace-write')
   assert.equal(body.lastReplace.applied, true)
 })

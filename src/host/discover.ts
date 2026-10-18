@@ -264,6 +264,22 @@ export function profilesForRoot(root: string, probe = false): BashProfile[] {
   return profiles
 }
 
+/**
+ * Git for Windows ships two `bash.exe` files: `bin\bash.exe` is a launcher
+ * that resets `MSYSTEM`/PATH from the installation (Git 2.56 uses UCRT64),
+ * while `usr\bin\bash.exe` honors the environment we compose. Normalize the
+ * former to the latter when it exists, so `MSYSTEM=MINGW64` and our PATH
+ * isolation actually apply.
+ * @param path - the user-provided bash path.
+ * @param root - the derived install root.
+ * @returns the canonical `usr\bin\bash.exe` when present, else the input.
+ */
+function canonicalGitBash(path: string, root: string): string {
+  if (!normalizePathKey(path).endsWith('\\bin\\bash.exe')) return path
+  const usr = winJoin(root, 'usr', 'bin', 'bash.exe')
+  return isFile(usr) ? usr : path
+}
+
 /** Resolve a user-provided bash path to a profile (no auto fallback). */
 export function profileFromPath(
   path: string,
@@ -284,7 +300,7 @@ export function profileFromPath(
     if (msystem !== 'auto' && msystem !== 'MINGW64') {
       return { problem: `Git for Windows only supports MSYSTEM=MINGW64, got ${msystem}` }
     }
-    return { profile: makeProfile('git', root, trimmed, 'MINGW64', probe) }
+    return { profile: makeProfile('git', root, canonicalGitBash(trimmed, root), 'MINGW64', probe) }
   }
   if (flavor === 'cygwin') {
     return { profile: makeProfile('cygwin', root, trimmed, undefined, probe) }

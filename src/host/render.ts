@@ -74,7 +74,7 @@ export function streamText(output: CollectedOutputLike): string {
 /** The compat-mode note, inserted before the terminal markers. */
 export function compatNote(value: { compat?: boolean; sessionMode?: string }): string | undefined {
   if (value.compat !== true) return undefined
-  return `[compat: Git Bash runs outside the DSH file sandbox (session mode ${value.sessionMode ?? 'workspace-write'})]`
+  return `[compat: bash runs outside the DSH file sandbox (session mode ${value.sessionMode ?? 'workspace-write'})]`
 }
 
 /**

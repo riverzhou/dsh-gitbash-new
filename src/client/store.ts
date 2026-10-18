@@ -129,6 +129,9 @@ export function createRowController(scope: SettingsScopeLike<RowConfig> | undefi
         compat: state.compat,
       },
       ...(state.effective !== undefined ? { effective: state.effective } : { effective: undefined }),
+      candidates: state.candidates.length > 0 ? state.candidates : store.getState().candidates,
+      ...(state.recommended !== undefined ? { recommended: state.recommended } : {}),
+      discovered: true,
       capability: state.capability,
       ...(state.lastReplace !== undefined ? { lastReplace: state.lastReplace } : { lastReplace: undefined }),
     })

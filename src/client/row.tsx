@@ -1,9 +1,20 @@
 /**
- * The General-settings row: one compact card with the effective profile, a
- * path field, discovery/test actions, the MSYS2 environment, and the
- * compatibility-mode warning.
+ * General-settings row, compact by default:
+ *   [effective badge]
+ *   Shell   [auto / Git / MSYS2 environment …]   [refresh]
+ *   Compat  [compatibility / strict]
+ *   ⚠ one-line warning
+ *   ▸ Advanced & diagnostics (manual path, test, MSYS2 env, status)
  */
-import { useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties, type ReactElement } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type CSSProperties,
+  type ReactElement,
+} from 'react'
 import { createRowController, type RowConfig } from './store.ts'
 import type { SettingsScopeLike, Translate } from './types.ts'
 import type { BashProfileView, MsystemSetting } from '../shared/protocol.ts'
@@ -13,34 +24,39 @@ export interface TerminalToolRowProps {
   readonly scope?: SettingsScopeLike<RowConfig> | undefined
 }
 
-const MSYSTEM_OPTIONS: readonly { value: MsystemSetting; label: string }[] = [
-  { value: 'auto', label: 'auto' },
-  { value: 'UCRT64', label: 'UCRT64' },
-  { value: 'MINGW64', label: 'MINGW64' },
-  { value: 'CLANG64', label: 'CLANG64' },
-  { value: 'CLANGARM64', label: 'CLANGARM64' },
-  { value: 'MINGW32', label: 'MINGW32' },
-  { value: 'MSYS', label: 'MSYS' },
-]
+const MSYSTEM_OPTIONS: readonly MsystemSetting[] = ['auto', 'UCRT64', 'MINGW64', 'CLANG64', 'CLANGARM64', 'MINGW32', 'MSYS']
+
+const AUTO = '__auto__'
+const MANUAL = '__manual__'
 
 const styles: Record<string, CSSProperties> = {
   card: {
     border: '1px solid color-mix(in srgb, currentColor 14%, transparent)',
     borderRadius: 10,
-    padding: '12px 14px',
+    padding: '10px 12px',
     display: 'grid',
-    gap: 10,
+    gap: 8,
     fontSize: 13,
   },
-  header: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 },
+  header: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 },
   title: { fontWeight: 600, fontSize: 14 },
-  subtitle: { opacity: 0.65, lineHeight: 1.45 },
-  row: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' as const },
-  label: { minWidth: 92, opacity: 0.75 },
+  subtitle: { opacity: 0.65, lineHeight: 1.4, fontSize: 12 },
+  row: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  label: { minWidth: 62, opacity: 0.75, fontSize: 12 },
+  select: {
+    minWidth: 220,
+    maxWidth: '100%',
+    padding: '4px 7px',
+    border: '1px solid color-mix(in srgb, currentColor 22%, transparent)',
+    borderRadius: 6,
+    background: 'transparent',
+    color: 'inherit',
+    fontSize: 12,
+  },
   input: {
     flex: 1,
-    minWidth: 240,
-    padding: '5px 8px',
+    minWidth: 220,
+    padding: '4px 8px',
     border: '1px solid color-mix(in srgb, currentColor 22%, transparent)',
     borderRadius: 6,
     background: 'transparent',
@@ -48,16 +64,8 @@ const styles: Record<string, CSSProperties> = {
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
     fontSize: 12,
   },
-  select: {
-    padding: '4px 6px',
-    border: '1px solid color-mix(in srgb, currentColor 22%, transparent)',
-    borderRadius: 6,
-    background: 'transparent',
-    color: 'inherit',
-    fontSize: 12,
-  },
   button: {
-    padding: '4px 10px',
+    padding: '3px 9px',
     border: '1px solid color-mix(in srgb, currentColor 22%, transparent)',
     borderRadius: 6,
     background: 'color-mix(in srgb, currentColor 6%, transparent)',
@@ -66,7 +74,7 @@ const styles: Record<string, CSSProperties> = {
     fontSize: 12,
   },
   buttonPrimary: {
-    padding: '4px 10px',
+    padding: '3px 9px',
     border: '1px solid color-mix(in srgb, currentColor 30%, transparent)',
     borderRadius: 6,
     background: 'color-mix(in srgb, currentColor 14%, transparent)',
@@ -75,47 +83,60 @@ const styles: Record<string, CSSProperties> = {
     fontSize: 12,
     fontWeight: 600,
   },
-  code: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: 11, opacity: 0.85 },
   warning: {
-    border: '1px solid color-mix(in srgb, #e5484d 45%, transparent)',
-    background: 'color-mix(in srgb, #e5484d 8%, transparent)',
-    color: 'inherit',
-    borderRadius: 8,
-    padding: '8px 10px',
+    border: '1px solid color-mix(in srgb, #e5484d 40%, transparent)',
+    background: 'color-mix(in srgb, #e5484d 7%, transparent)',
+    borderRadius: 7,
+    padding: '5px 8px',
     lineHeight: 1.45,
+    fontSize: 12,
   },
   strict: {
-    border: '1px solid color-mix(in srgb, #f5a623 45%, transparent)',
-    background: 'color-mix(in srgb, #f5a623 8%, transparent)',
-    borderRadius: 8,
-    padding: '8px 10px',
+    border: '1px solid color-mix(in srgb, #f5a623 40%, transparent)',
+    background: 'color-mix(in srgb, #f5a623 7%, transparent)',
+    borderRadius: 7,
+    padding: '5px 8px',
     lineHeight: 1.45,
+    fontSize: 12,
   },
-  muted: { opacity: 0.65 },
-  error: { color: '#e5484d' },
+  muted: { opacity: 0.65, fontSize: 12 },
+  error: { color: '#e5484d', fontSize: 12, lineHeight: 1.45 },
   badge: {
     border: '1px solid color-mix(in srgb, currentColor 20%, transparent)',
     borderRadius: 999,
-    padding: '0 7px',
+    padding: '0 8px',
     fontSize: 11,
-    opacity: 0.8,
+    opacity: 0.85,
+    whiteSpace: 'nowrap',
   },
-  statusGrid: { display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '2px 10px', fontSize: 12 },
+  summary: { cursor: 'pointer', opacity: 0.75, fontSize: 12 },
+  detailsBody: { display: 'grid', gap: 8, paddingTop: 8 },
+  status: { display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '1px 10px', fontSize: 11, opacity: 0.8 },
+  code: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' },
 }
 
-/** Human label for one profile. */
+/** Profile label for the selector. */
 function profileLabel(profile: BashProfileView): string {
-  const parts = [profile.flavor === 'git' ? 'Git for Windows' : profile.flavor === 'msys2' ? `MSYS2 ${profile.msystem ?? ''}` : 'Cygwin']
-  if (profile.version !== undefined) parts.push(profile.version)
-  return parts.filter(Boolean).join(' ')
+  const base = profile.flavor === 'git'
+    ? 'Git for Windows'
+    : profile.flavor === 'msys2'
+      ? `MSYS2 ${profile.msystem ?? 'MSYS'}`
+      : 'Cygwin'
+  return profile.version !== undefined ? `${base} ${profile.version}` : base
 }
 
-/** The row component. */
+/** Compare paths case-insensitively with either separator. */
+function samePath(a: string, b: string): boolean {
+  return a.replaceAll('/', '\\').toLowerCase() === b.replaceAll('/', '\\').toLowerCase()
+}
+
+/** The compact row. */
 export function TerminalToolRow({ t, scope }: TerminalToolRowProps): ReactElement {
   const controller = useMemo(() => createRowController(scope), [scope])
   const state = useSyncExternalStore(controller.store.subscribe, controller.store.getState, controller.store.getState)
   const [draftPath, setDraftPath] = useState(state.config.bashPath)
-  const [selected, setSelected] = useState('')
+  const [advanced, setAdvanced] = useState(false)
+  const pathInput = useRef<HTMLInputElement>(null)
 
   useEffect(() => controller.start(), [controller])
   useEffect(() => {
@@ -123,12 +144,27 @@ export function TerminalToolRow({ t, scope }: TerminalToolRowProps): ReactElemen
   }, [state.config.bashPath])
 
   const disabled = !state.writable || state.saving || state.discovering
-  const effective = state.effective
   const compat = state.config.compat
+  const candidates = state.candidates
+  const matched = state.config.bashPath.length === 0
+    ? undefined
+    : candidates.find(candidate => samePath(candidate.path, state.config.bashPath)
+      && (state.config.msystem === 'auto' || (candidate.msystem ?? 'auto') === state.config.msystem))
+  const selectedValue = state.config.bashPath.length === 0
+    ? AUTO
+    : matched?.id ?? MANUAL
 
-  const onDiscovered = (value: string): void => {
-    setSelected(value)
-    const profile = state.candidates.find(candidate => candidate.id === value)
+  const choose = (value: string): void => {
+    if (value === AUTO) {
+      void controller.resetAuto()
+      return
+    }
+    if (value === MANUAL) {
+      setAdvanced(true)
+      setTimeout(() => pathInput.current?.focus(), 0)
+      return
+    }
+    const profile = candidates.find(candidate => candidate.id === value)
     if (profile !== undefined) void controller.useProfile(profile)
   }
 
@@ -137,78 +173,38 @@ export function TerminalToolRow({ t, scope }: TerminalToolRowProps): ReactElemen
       <div style={styles.header}>
         <div>
           <div style={styles.title}>{t('title')}</div>
-          <div style={styles.subtitle}>{t('subtitle')}</div>
+          <div style={styles.subtitle}>{t('subtitleShort')}</div>
         </div>
-        <span style={styles.badge}>{effective?.label ?? t('noPath')}</span>
+        <span style={styles.badge} title={state.effective?.path}>
+          {state.effective?.label ?? t('noPath')}
+        </span>
       </div>
 
       {!state.writable ? <div style={styles.muted}>{state.scopeStatus === 'unavailable' ? t('unavailable') : t('readOnly')}</div> : null}
 
       <div style={styles.row}>
-        <span style={styles.label}>{t('pathLabel')}</span>
-        <input
-          style={styles.input}
-          value={draftPath}
-          placeholder={t('pathPlaceholder')}
-          spellCheck={false}
-          disabled={!state.writable || state.saving}
-          onChange={event => setDraftPath(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') void controller.setConfig({ bashPath: draftPath.trim() })
-          }}
-        />
-        <button
-          style={styles.buttonPrimary}
-          disabled={disabled}
-          onClick={() => void controller.setConfig({ bashPath: draftPath.trim() })}
-        >
-          {t('apply')}
-        </button>
-        <button style={styles.button} disabled={disabled} onClick={() => void controller.resetAuto()}>
-          {t('reset')}
-        </button>
-      </div>
-
-      <div style={styles.row}>
-        <span style={styles.label}>{t('auto')}</span>
-        <button style={styles.buttonPrimary} disabled={disabled} onClick={() => void controller.discover()}>
-          {state.discovering ? t('discovering') : t('auto')}
-        </button>
-        <button style={styles.button} disabled={disabled || state.validating} onClick={() => void controller.validate()}>
-          {state.validating ? t('testing') : t('test')}
-        </button>
-        {state.candidates.length > 0 ? (
-          <select style={styles.select} value={selected} onChange={event => onDiscovered(event.target.value)}>
-            <option value="">{t('selectCandidate')}</option>
-            {state.candidates.map(profile => (
-              <option key={profile.id} value={profile.id}>
-                {profileLabel(profile)} — {profile.path}{profile.valid ? '' : ` (${profile.problem ?? 'invalid'})`}
-              </option>
-            ))}
-          </select>
-        ) : null}
-        {state.recommended !== undefined ? (
-          <span style={styles.badge}>
-            {t('recommended')}: {state.recommended.label}
-          </span>
-        ) : null}
-      </div>
-
-      <div style={styles.row}>
-        <span style={styles.label}>{t('msystem')}</span>
+        <span style={styles.label}>{t('shell')}</span>
         <select
           style={styles.select}
-          value={state.config.msystem}
-          disabled={!state.writable || state.saving}
-          onChange={event => void controller.setConfig({ msystem: event.target.value as MsystemSetting })}
+          value={selectedValue}
+          disabled={disabled}
+          onChange={event => choose(event.target.value)}
         >
-          {MSYSTEM_OPTIONS.map(option => (
-            <option key={option.value} value={option.value}>{option.value === 'auto' ? t('msystemAuto') : option.label}</option>
+          <option value={AUTO}>{t('autoRecommended')}</option>
+          {candidates.map(profile => (
+            <option key={profile.id} value={profile.id} disabled={!profile.valid}>
+              {profileLabel(profile)}{profile.valid ? '' : ` — ${profile.problem ?? t('invalidPath')}`}
+            </option>
           ))}
+          {selectedValue === MANUAL ? <option value={MANUAL}>{t('manualPath')}: {state.config.bashPath}</option> : null}
         </select>
-        <span style={styles.muted}>{t('msys2')} only</span>
+        <button style={styles.button} disabled={disabled} onClick={() => void controller.discover()}>
+          {state.discovering ? t('refreshing') : t('refresh')}
+        </button>
+      </div>
 
-        <span style={{ ...styles.label, marginLeft: 8 }}>{t('compat')}</span>
+      <div style={styles.row}>
+        <span style={styles.label}>{t('compat')}</span>
         <select
           style={styles.select}
           value={compat}
@@ -220,27 +216,76 @@ export function TerminalToolRow({ t, scope }: TerminalToolRowProps): ReactElemen
         </select>
       </div>
 
-      <div style={compat === 'auto' ? styles.warning : styles.strict}>
-        {compat === 'auto' ? t('warningAuto') : t('warningStrict')}
+      <div
+        style={compat === 'auto' ? styles.warning : styles.strict}
+        title={compat === 'auto' ? t('warningAuto') : t('warningStrict')}
+      >
+        {compat === 'auto' ? t('warningShort') : t('warningStrictShort')}
       </div>
 
-      <div style={styles.statusGrid}>
-        <span style={styles.muted}>{t('platform')}</span>
-        <span style={styles.code}>{state.platform || '—'}</span>
-        <span style={styles.muted}>{t('sandboxMode')}</span>
-        <span style={styles.code}>{state.capability.shellSandboxMode ?? '—'}</span>
-        <span style={styles.muted}>{t('backgroundJobs')}</span>
-        <span style={styles.code}>{state.capability.backgroundJobs ? t('yes') : t('no')}</span>
-        <span style={styles.muted}>{t('lastReplace')}</span>
-        <span style={styles.code}>
-          {state.lastReplace === undefined
-            ? '—'
-            : `${state.lastReplace.applied ? t('applied') : t('skipped')}${state.lastReplace.reason !== undefined ? `: ${state.lastReplace.reason}` : ''}`}
-        </span>
-      </div>
+      {state.error !== undefined ? <div style={styles.error}>{state.error}</div> : null}
 
-      {state.error !== undefined ? <div style={{ ...styles.error, lineHeight: 1.45 }}>{state.error}</div> : null}
-      {state.notice !== undefined && state.error === undefined ? <div style={styles.muted}>{state.notice}</div> : null}
+      <details
+        open={advanced}
+        onToggle={event => setAdvanced((event.currentTarget as HTMLDetailsElement).open)}
+      >
+        <summary style={styles.summary}>{t('advanced')}</summary>
+        <div style={styles.detailsBody}>
+          <div style={styles.row}>
+            <span style={styles.label}>{t('pathLabel')}</span>
+            <input
+              ref={pathInput}
+              style={styles.input}
+              value={draftPath}
+              placeholder={t('pathPlaceholder')}
+              spellCheck={false}
+              disabled={!state.writable || state.saving}
+              onChange={event => setDraftPath(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') void controller.setConfig({ bashPath: draftPath.trim() })
+              }}
+            />
+            <button style={styles.buttonPrimary} disabled={disabled} onClick={() => void controller.setConfig({ bashPath: draftPath.trim() })}>
+              {t('apply')}
+            </button>
+            <button style={styles.button} disabled={disabled} onClick={() => void controller.resetAuto()}>
+              {t('reset')}
+            </button>
+            <button style={styles.button} disabled={disabled || state.validating} onClick={() => void controller.validate()}>
+              {state.validating ? t('testing') : t('test')}
+            </button>
+          </div>
+
+          <div style={styles.row}>
+            <span style={styles.label}>{t('msystem')}</span>
+            <select
+              style={styles.select}
+              value={state.config.msystem}
+              disabled={!state.writable || state.saving}
+              onChange={event => void controller.setConfig({ msystem: event.target.value as MsystemSetting })}
+            >
+              {MSYSTEM_OPTIONS.map(option => (
+                <option key={option} value={option}>{option === 'auto' ? t('msystemAuto') : option}</option>
+              ))}
+            </select>
+            <span style={styles.muted}>{t('msystemHint')}</span>
+          </div>
+
+          <div style={styles.status}>
+            <span>{t('platform')}</span><span style={styles.code}>{state.platform || '—'}</span>
+            <span>{t('sandboxMode')}</span><span style={styles.code}>{state.capability.shellSandboxMode ?? '—'}</span>
+            <span>{t('backgroundJobs')}</span><span style={styles.code}>{state.capability.backgroundJobs ? t('yes') : t('no')}</span>
+            <span>{t('lastReplace')}</span>
+            <span style={styles.code}>
+              {state.lastReplace === undefined
+                ? '—'
+                : `${state.lastReplace.applied ? t('applied') : t('skipped')}${state.lastReplace.reason !== undefined ? `: ${state.lastReplace.reason}` : ''}`}
+            </span>
+          </div>
+
+          {state.notice !== undefined && state.error === undefined ? <div style={styles.muted}>{state.notice}</div> : null}
+        </div>
+      </details>
     </div>
   )
 }

@@ -74,6 +74,10 @@ export interface StateView {
   readonly compat: CompatMode
   /** Effective profile after applying `auto`; absent when nothing validates. */
   readonly effective?: BashProfileView
+  /** Cached profiles, so the row can offer a selector without a scan. */
+  readonly candidates: readonly BashProfileView[]
+  /** The profile `auto` would pick, when any. */
+  readonly recommended?: BashProfileView
   readonly capability: CapabilityView
   readonly lastReplace?: ReplaceView
   /** Config/settings write target the row can use. */
