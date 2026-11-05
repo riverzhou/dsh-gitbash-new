@@ -57,6 +57,10 @@ documentation match the implementation.
   workdir, subagent) and 15/15 settings-page checks (clean load, MSYS2 switch,
   strict round-trip, advanced diagnostics, no console/network errors). Strict
   refusal was also exercised from a real session. See `docs/SMOKE.md`.
+- The published npm artifact (`@riverzh/dsh-gitbash@0.2.4`, the `latest` tag) was
+  installed into a clean profile and exercised once: `/state` reported a
+  supported Git deployment and the model ran a real `bash` call (`NPM_024_OK`,
+  `MSYSTEM=MINGW64`).
 
 ### Not covered
 

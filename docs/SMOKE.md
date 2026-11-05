@@ -471,5 +471,10 @@ compatcheck ok
 
 - `/validate` 对相对路径返回 `bashPath must be an absolute path`（0.2.4 新校验）。
 - 持久化：profile `cordis.patch.yml` 读回 `bashPath` / `msystem` / `compat` 三项。
+- 发布产物：从 npm 安装 `@riverzh/dsh-gitbash@0.2.4`（`latest`）到独立 profile，
+  `/state` 返回 effective Git / capability supported，直连 bash 返回
+  `NPM_024_OK` / `MSYSTEM=MINGW64`；41 个文件的 tarball 含 `lib/`、`cordis.patch.yml`
+  与文档。
 - 单测 90/90；selftest 10/10；compatcheck 8 组通过（含 `tool-pwsh` 替换目标）。
-- 测试 profile `gitbash-audit` 与临时浏览器目录已在验证后清理；桌面 profile 未改动。
+- 测试 profile `gitbash-audit` / `gitbash-npm24` 与临时浏览器目录已在验证后清理；
+  桌面 profile 未改动。
