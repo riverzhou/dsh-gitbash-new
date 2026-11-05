@@ -3,6 +3,56 @@
 All notable changes to this project are documented here. One version per
 entry; the Git history is the evidence.
 
+## 0.2.3 — 2026-11-06
+
+DSH 0.2.2 synchronization. Baseline moves to desktop runtime `0.2.2-rc.1`
+(source checkout `dsh-v0.2.2-rc.1`); the plugin now requires DSH `>=0.2.2-0`.
+
+### Changed
+
+- **Promoted result text** follows the official 0.2.2 renderer: a foreground
+  call that moves to the background ends at
+  `[still running after <t>ms; moved to background job <id>]`. The old
+  “The command keeps running…” hand-off sentence is gone because DSH 0.2.2
+  moved that guidance into the `tool:jobs` prompt section.
+- `engines.dsh` is `>=0.2.2-0` and `engines.node` is `>=24.9.0`, matching the
+  DSH 0.2.2 workspace floor; `@deepseek-ai/schemastery` is `~3.19.0`.
+- `package.json.dsh.bundle.platforms` is `["win32"]`: DSH 0.2.2 rejects or
+  skips the bundle on non-Windows Hosts before reading `cordis.patch.yml`
+  (the patch gate remains as the second line of defence).
+
+### Added
+
+- Escalation approval text now covers all eight DSH 0.2.2 locales
+  (`en`, `zh`, `ja`, `es`, `fr`, `de`, `ru`, `pt`) with the official strings;
+  previously only `en`/`zh` were supplied and every other UI language fell
+  back to English.
+- `compatcheck` reads the deployed `dsh/package.json`, enforces the floor from
+  this package's `engines.dsh`, and checks Host **and Client** bundles
+  (`tool-bash`, `agent`, `system-prompt`, `tools`, `sandbox`,
+  `client-ui-settings`, `client-ui-settings-general`), including the new
+  promoted template and all eight escalation locale strings.
+- Packaging tests for the 0.2.2 manifest fields (`dsh.bundle.platforms`,
+  engine floors, patch platform gate, client entry points).
+- Real-machine smoke on DSH `0.2.2-rc.1`: Git and MSYS2 direct calls, a
+  promoted call (new text), background job + `job_output`, a continuable
+  subagent, and the real settings row (UI switch to MSYS2 UCRT64) — recorded
+  in `docs/SMOKE.md` with a fresh screenshot.
+
+### Tests
+
+- 82 tests (up from 75): promote-without-guidance, compat-note placement,
+  eight-locale escalation text, and the packaging contract.
+
+### Not covered
+
+- The Windows ACL sandbox still uses `DISABLE_MAX_PRIVILEGE |
+  WRITE_RESTRICTED` in 0.2.2 (only `LUA_TOKEN` was dropped); the
+  “MSYS2 cannot start confined” conclusion is re-checked at source level, not
+  re-run on 0.2.2. The compatibility-mode security model is unchanged.
+- `read-only` / `strict` real-UI refusal and the approval dialog remain
+  unit-covered, as in 0.2.2.
+
 ## 0.2.2 — 2026-10-18
 
 ### Fixed

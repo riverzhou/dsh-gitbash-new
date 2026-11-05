@@ -1,7 +1,7 @@
 {
   "name": "@riverzh/dsh-gitbash",
   "description": "Windows Git Bash / MSYS2 terminal tool for DeepSeek Harness (DSH), replacing pwsh with a selectable bash profile",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "type": "module",
   "license": "GPL-3.0-only",
   "repository": {
@@ -9,8 +9,8 @@
     "url": "git+https://github.com/riverzhou/dsh-gitbash-new.git"
   },
   "engines": {
-    "node": "^22.19.0 || >=24.0.0",
-    "dsh": ">=0.2.1-0"
+    "node": ">=24.9.0",
+    "dsh": ">=0.2.2-0"
   },
   "main": "lib/index.js",
   "types": "src/index.ts",
@@ -37,6 +37,9 @@
   ],
   "dsh": {
     "bundle": {
+      "platforms": [
+        "win32"
+      ],
       "patch": "./cordis.patch.yml"
     },
     "client": {
@@ -53,7 +56,7 @@
     "compatcheck": "node scripts/compatcheck.mjs"
   },
   "dependencies": {
-    "@deepseek-ai/schemastery": "~3.18.5"
+    "@deepseek-ai/schemastery": "~3.19.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

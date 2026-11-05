@@ -4,6 +4,7 @@ import {
   ESCALATION_TARGETS,
   WIDER_MODES,
   approveEscalation,
+  escalationDisplayReason,
   validateEscalationArgs,
   sandboxPermissionsDescription,
 } from '../lib/index.js'
@@ -63,6 +64,22 @@ test('allowed-once resolves the wider mode and sends the official reason shape',
   assert.equal(calls[0].reason, 'escalate sandbox to danger-full-access: needs node_modules')
   assert.equal(calls[0].displayReason.en, 'Allow this operation with danger-full-access permissions: needs node_modules')
   assert.equal(calls[0].displayReason.zh, '允许本次操作使用 danger-full-access 权限：needs node_modules')
+})
+
+test('escalation display reason covers every 0.2.2 locale', () => {
+  const mode = 'workspace-write'
+  const justification = 'read the lockfile'
+  const display = escalationDisplayReason(mode, justification)
+  assert.deepEqual(Object.keys(display).sort(), ['de', 'en', 'es', 'fr', 'ja', 'pt', 'ru', 'zh'])
+  assert.equal(display.en, `Allow this operation with ${mode} permissions: ${justification}`)
+  assert.equal(display.zh, `允许本次操作使用 ${mode} 权限：${justification}`)
+  assert.equal(display.ja, `${mode} 権限でこの操作を許可します：${justification}`)
+  assert.equal(display.es, `Permitir esta operación con permisos ${mode}: ${justification}`)
+  assert.equal(display.fr, `Autoriser cette opération avec les permissions ${mode} : ${justification}`)
+  assert.equal(display.de, `Diesen Vorgang mit ${mode}-Berechtigungen zulassen: ${justification}`)
+  assert.equal(display.ru, `Разрешить эту операцию с правами ${mode}: ${justification}`)
+  assert.equal(display.pt, `Permitir esta operação com permissões ${mode}: ${justification}`)
+  for (const text of Object.values(display)) assert.equal(text.includes(justification), true)
 })
 
 test('rejected / cancelled / unavailable fail closed', async () => {

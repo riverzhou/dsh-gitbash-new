@@ -48,7 +48,7 @@ test('compat note precedes the terminal marker so the pill still parses', () => 
   assert.equal(compatNote(value)?.includes('outside the DSH file sandbox'), true)
 })
 
-test('promoted result renders output and hand-off guidance', () => {
+test('promoted result renders output and the 0.2.2 still-running marker only', () => {
   const text = renderPromoted({
     kind: 'promoted',
     cwd: 'C:\\work',
@@ -56,8 +56,27 @@ test('promoted result renders output and hand-off guidance', () => {
     timeoutMs: 1000,
     output: 'partial\n',
   })
-  assert.equal(text.startsWith('partial\n[still running after 1000ms; moved to background job bash-0123456789abcdef]'), true)
-  assert.equal(text.includes('job_output'), true)
+  assert.equal(text, 'partial\n[still running after 1000ms; moved to background job bash-0123456789abcdef]')
+  // 0.2.2 moved the follow-up guidance into the `tool:jobs` prompt section.
+  assert.equal(text.includes('job_output'), false)
+  assert.equal(text.endsWith('\n'), false)
+})
+
+test('a promoted result keeps the compat note before the marker', () => {
+  const text = renderPromoted({
+    kind: 'promoted',
+    cwd: 'C:\\work',
+    jobId: 'bash-0123456789abcdef',
+    timeoutMs: 1000,
+    output: 'partial\n',
+    compat: true,
+    sessionMode: 'workspace-write',
+  })
+  assert.equal(
+    text,
+    'partial\n[compat: bash runs outside the DSH file sandbox (session mode workspace-write)]\n'
+    + '[still running after 1000ms; moved to background job bash-0123456789abcdef]',
+  )
 })
 
 test('a null exit code does not render an invalid exit marker', () => {

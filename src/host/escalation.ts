@@ -49,6 +49,25 @@ export function sandboxPermissionsDescription(subject: string): string {
   return `The narrowest wider sandbox mode for a one-shot retry of the exact ${subject} the sandbox just denied; the retry asks the user for approval.`
 }
 
+/**
+ * The localized escalation approval text, mirrored from
+ * `@deepseek-ai/dsh-sandbox` 0.2.2 (`escalationDisplayReason`). DSH ships eight
+ * locales; a request that carries only en/zh leaves every other UI language on
+ * the English fallback. The audit reason (`reason`) stays locale-neutral.
+ */
+export function escalationDisplayReason(mode: string, justification: string): Record<'en' | 'zh' | 'ja' | 'es' | 'fr' | 'de' | 'ru' | 'pt', string> {
+  return {
+    en: `Allow this operation with ${mode} permissions: ${justification}`,
+    zh: `允许本次操作使用 ${mode} 权限：${justification}`,
+    ja: `${mode} 権限でこの操作を許可します：${justification}`,
+    es: `Permitir esta operación con permisos ${mode}: ${justification}`,
+    fr: `Autoriser cette opération avec les permissions ${mode} : ${justification}`,
+    de: `Diesen Vorgang mit ${mode}-Berechtigungen zulassen: ${justification}`,
+    ru: `Разрешить эту операцию с правами ${mode}: ${justification}`,
+    pt: `Permitir esta operação com permissões ${mode}: ${justification}`,
+  }
+}
+
 /** The approval ingredients this tool supplies. */
 export interface EscalationApproval {
   approver: ApprovalServiceLike | undefined
@@ -91,10 +110,7 @@ export async function approveEscalation(
     toolName: approval.toolName,
     callId: approval.callId,
     reason: `escalate sandbox to ${mode}: ${justification}`,
-    displayReason: {
-      en: `Allow this operation with ${mode} permissions: ${justification}`,
-      zh: `允许本次操作使用 ${mode} 权限：${justification}`,
-    },
+    displayReason: escalationDisplayReason(mode, justification),
     ...approval.signal !== undefined ? { signal: approval.signal } : {},
   })
   switch (outcome) {

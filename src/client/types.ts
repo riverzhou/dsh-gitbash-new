@@ -1,5 +1,5 @@
 /**
- * Client-side structural projections (0.2.1). The bundle may require only the
+ * Client-side structural projections (0.2.2). The bundle may require only the
  * page seed modules (`react` / `react/jsx-runtime`), so DSH client packages are
  * reached through services and typed by shape here.
  */
@@ -24,7 +24,7 @@ export interface SlotsServiceLike {
   register(options: SlotRegisterOptionsLike, component: (props: unknown) => unknown): unknown
 }
 
-/** Snapshot of a config form (0.2.1: no `mode` field). */
+/** Snapshot of a config form (0.2.2: no `mode` field). */
 export interface SettingsScopeSnapshotLike<T> {
   readonly status: 'loading' | 'ready' | 'unavailable'
   readonly value: T | undefined
@@ -49,7 +49,7 @@ export interface SettingsScopeLike<T> {
 /** The official `configForms` service. */
 export interface ConfigFormsLike {
   get<T>(entryId: string): SettingsScopeLike<T>
-  /** Invoke `register` once the given namespaces are served (0.2.1). */
+  /** Invoke `register` once the given namespaces are served (0.2.2). */
   whileServed?(namespaces: readonly string[], register: () => void): unknown
 }
 

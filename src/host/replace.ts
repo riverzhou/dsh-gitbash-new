@@ -31,7 +31,7 @@ import type {
 /** The preset's Windows terminal tool name. */
 export const PWSH_TOOL_NAME = 'pwsh'
 
-/** Official prompt-section names/orders (0.2.1). */
+/** Official prompt-section names/orders (0.2.2). */
 export const ORDER_TOOL_BASH = 1000
 export const ORDER_TOOL_PWSH = 1010
 
@@ -78,7 +78,7 @@ export function probeCapability(agentCtx: AgentContextLike): Capability {
   }
 }
 
-/** Read a prompt order, falling back to the 0.2.1 constant. */
+/** Read a prompt order, falling back to the 0.2.2 constant. */
 function sectionOrder(prompt: SystemPromptLike, name: string, fallback: number): number {
   try {
     const value = prompt.getSectionOrder(name)

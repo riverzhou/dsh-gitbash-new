@@ -11,7 +11,7 @@ escalation, terminal cards, PTC and `meta.cwd`.
 This is the complete user manual and reference. It covers installation, daily
 usage, the security model, settings, troubleshooting and development.
 
-> **Minimum DSH: 0.2.1.** Windows 10/11 only. The replacement applies to **new
+> **Minimum DSH: 0.2.2.** Windows 10/11 only. The replacement applies to **new
 > sessions**; existing sessions keep the tools they were created with.
 
 ---
@@ -70,8 +70,9 @@ usage, the security model, settings, troubleshooting and development.
   runs bash unconfined and labels the result with `[compat: ...]`, `read-only`
   refuses, and `strict` allows only `danger-full-access`. See
   [Security model](#security-model-read-this-first).
-- **Verified**: 75 unit and integration tests, plus real-machine smoke on Git
-  and MSYS2 (direct, background and subagent calls; light and dark settings UI).
+- **Verified**: 82 unit and integration tests, plus real-machine smoke on DSH
+  `0.2.2-rc.1` with Git and MSYS2 (direct, promoted, background and subagent
+  calls; the settings row in the real Web UI).
 
 ---
 
@@ -79,10 +80,10 @@ usage, the security model, settings, troubleshooting and development.
 
 | Item | Requirement |
 |---|---|
-| DSH | `>= 0.2.1` (tested on desktop runtime `0.2.1-rc.2`) |
+| DSH | `>= 0.2.2` (tested on desktop runtime `0.2.2-rc.1`) |
 | Windows | Windows 10/11, x64; MSYS2 arm64 environments are also supported |
 | bash provider | Git for Windows and/or MSYS2 |
-| Node.js | `^22.19.0` or `>=24`, development/build only |
+| Node.js | `>= 24.9`, development/build only (the DSH 0.2.2 floor) |
 | Optional | Cygwin, best-effort and not recommended |
 
 - Git Bash and MSYS2 both use the MSYS2 runtime. That runtime cannot start
@@ -98,12 +99,12 @@ usage, the security model, settings, troubleshooting and development.
 ### Use the CLI that ships with DSH Desktop
 
 Do **not** use an old global npm `dsh` (for example `0.1.7`); it does not know
-the 0.2.1 plugin/profile contract. Use the CLI under the desktop install:
+the 0.2.2 plugin/profile contract. Use the CLI under the desktop install:
 
 ```bat
 set "DSH_CLI=%LOCALAPPDATA%\Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd"
 %DSH_CLI% --version
-:: expect 0.2.1-rc.2 or newer
+:: expect 0.2.2-rc.1 or newer
 ```
 
 Fully quit DSH Desktop before changing a profile.
@@ -125,7 +126,7 @@ Reopen DSH, then hard-refresh the Web UI (`Ctrl+Shift+R`).
 ### From npm (published)
 
 ```bat
-%DSH_CLI% plugin --profile desktop add @riverzh/dsh-gitbash@0.2.2
+%DSH_CLI% plugin --profile desktop add @riverzh/dsh-gitbash@0.2.3
 ```
 
 Use `@riverzh/dsh-gitbash@latest` for the newest release.
@@ -181,7 +182,7 @@ skips because `pwsh` is no longer restrictable. The log contains
 
 The settings row looks like this:
 
-![Settings row: terminal tool](docs/images/settings-row.png)
+![Settings row: terminal tool](docs/images/settings-row-0.2.2.png)
 
 The Shell, Compatibility and MSYS2-environment dropdowns use the DSH light/dark
 surface tokens, so both the closed control and the open list stay readable:
@@ -473,7 +474,7 @@ UCRT64, you are probably running an older plugin build or a stale session.
 | Symptom | What to do |
 |---|---|
 | Settings says no bash found | Install Git for Windows or MSYS2; click **Refresh**; or enter `<root>\usr\bin\bash.exe` manually (no quotes) |
-| New session still has `pwsh` | Confirm DSH `>= 0.2.1`, the plugin is in the profile bundles, and DSH was restarted; inspect `%TEMP%\dsh-gitbash.log` for `replace:` |
+| New session still has `pwsh` | Confirm DSH `>= 0.2.2`, the plugin is in the profile bundles, and DSH was restarted; inspect `%TEMP%\dsh-gitbash.log` for `replace:` |
 | Only old sessions have no bash | Replacement is per-agent; start a new session. Subagents inherit from their parent |
 | Git session reports `MSYSTEM=UCRT64` | Old `bin\bash.exe` path/build; use Auto/Refresh; current builds canonicalize to `usr\bin\bash.exe` |
 | MSYS2 environment not installed | Install it in MSYS2; the profile only lists environments whose `bin` directory exists |
@@ -502,8 +503,9 @@ UCRT64, you are probably running an older plugin build or a stale session.
   not a public unauthenticated API.
 - **DSH Developer Tools**: raw session events, message grouping and the Node
   backend are the authoritative view for job and subagent cards.
-- **Compatibility check**: `pnpm compatcheck` compares the deployed official
-  bundles with the strings this plugin depends on.
+- **Compatibility check**: `pnpm compatcheck` reads the installed runtime
+  version, enforces the plugin's `engines.dsh` floor, and compares the deployed
+  official Host and Client bundles with the strings this plugin depends on.
 
 For a full real-machine transcript, see [docs/SMOKE.md](docs/SMOKE.md).
 
@@ -511,7 +513,7 @@ For a full real-machine transcript, see [docs/SMOKE.md](docs/SMOKE.md).
 
 ## Compatibility and upgrades
 
-- Minimum DSH: **0.2.1**. The plugin uses structural projections of official
+- Minimum DSH: **0.2.2**. The plugin uses structural projections of official
   services (`ctx.subprocess`, `ctx.jobs`, `ctx.sandboxPolicy`, `ctx.shellEnv`,
   `ctx.workingDirectory`, `ctx.approval`, `ctx.configForms`, etc.) and does not
   import private DSH packages.
@@ -524,12 +526,14 @@ For a full real-machine transcript, see [docs/SMOKE.md](docs/SMOKE.md).
   3. rebuild (`pnpm build`) if `src/` changed; the committed `lib/` must match
      `src/`
   4. restart DSH and hard-refresh the Web UI
-- Non-Windows does not register any behaviour (`cordis.patch.yml` disables the
-  entry when `process.platform !== 'win32'`).
+- Non-Windows does not register any behaviour: `package.json` declares
+  `dsh.bundle.platforms: ["win32"]` (DSH 0.2.2 Host admission) and
+  `cordis.patch.yml` disables the entry when `process.platform !== 'win32'`.
 
-**Verified on 2026-10-18:** DSH `0.2.1-rc.2`, Git for Windows 2.56 and MSYS2
-5.3.20 (UCRT64); direct bash, background jobs, subagents, the settings switch and
-the native UI cards were exercised. Raw events: [docs/SMOKE.md](docs/SMOKE.md).
+**Verified on 2026-11-06:** DSH `0.2.2-rc.1`, Git for Windows 2.56 and MSYS2
+5.3.20 (UCRT64); direct bash, promoted results, background jobs, subagents and
+the real settings row (MSYS2 switch through the UI) were exercised. Raw events:
+[docs/SMOKE.md](docs/SMOKE.md).
 
 ---
 
@@ -539,7 +543,7 @@ the native UI cards were exercised. Raw events: [docs/SMOKE.md](docs/SMOKE.md).
 pnpm install
 pnpm build        # lib/index.js + lib/client.js
 pnpm check        # tsc --noEmit
-pnpm test         # node:test; 75 tests, including real Git/MSYS2 when present
+pnpm test         # node:test; 82 tests, including real Git/MSYS2 when present
 pnpm selftest     # pure-logic checks, no DSH needed
 pnpm compatcheck  # contract-string check against the installed DSH
 ```
@@ -574,9 +578,10 @@ pnpm test
 pnpm pack
 ```
 
-The npm package is `@riverzh/dsh-gitbash` (the DSH entry id stays `dsh-gitbash`) with `engines.dsh = ">=0.2.1-0"` and
-`engines.node = "^22.19.0 || >=24.0.0"`. It ships the host entry, client bundle, `lib/`, `src/`,
-`cordis.patch.yml`, docs and both READMEs.
+The npm package is `@riverzh/dsh-gitbash` (the DSH entry id stays `dsh-gitbash`) with `engines.dsh = ">=0.2.2-0"` and
+`engines.node = ">=24.9.0"`. It ships the host entry, client bundle, `lib/`, `src/`,
+`cordis.patch.yml`, docs and both READMEs. `dsh.bundle.platforms` restricts the
+bundle to Windows, so a non-Windows DSH skips it before the patch is read.
 
 ---
 

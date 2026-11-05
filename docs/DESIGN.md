@@ -1,7 +1,7 @@
 # dsh-gitbash 设计文档
 
-> 状态：**已定稿（2026-10-18）**。实现以本文为准；契约改动必须先改本文。
-> 基线：DSH `0.2.1-rc.2`（桌面运行时 + 源码 checkout 双重核对）。最低支持 `0.2.1`。
+> 状态：**已定稿（2026-11-06）**。实现以本文为准；契约改动必须先改本文。
+> 基线：DSH `0.2.2-rc.1`（桌面运行时 + 源码 checkout 双重核对）。最低支持 `0.2.2`。
 
 ---
 
@@ -47,6 +47,8 @@ Git Bash（MSYS2 运行时）**无法在 DSH 官方 Windows ACL 沙箱里启动*
 
 根因是 MSYS2 启动时必须创建**带当前用户 SID 的命名对象**（共享内存、signals 管道、`BaseNamedObjects` 子目录）；WRITE_RESTRICTED 令牌把这些 SID 标成 deny-only，Low 完整性又禁止向 Medium 的对象命名空间写入。二者不可兼得。
 
+**0.2.2 复核（源码级）**：DSH 0.2.2 只从 `CreateRestrictedToken` 去掉了 `LUA_TOKEN`，仍保留 `DISABLE_MAX_PRIVILEGE | WRITE_RESTRICTED` 与 restricting SIDs（提交 `bdd75ca1a0`，`packages/sandbox/sandbox-windows-acl/src/token.ts`）。去 `LUA_TOKEN` 解决的是内置 Administrator 无法启动进程的问题，不改变上面的命名对象冲突。本插件**未**在 0.2.2 上重跑“受限令牌启动 MSYS2”实验；安全结论沿用 0.2.1-rc.2 的实测，不据此宣称 0.2.2 可沙箱化。
+
 ### 2.2 决策：体验优先 + 显式标注
 
 所有者 2026-10-18 拍板：**体验优先**。因此：
@@ -81,7 +83,7 @@ bashTool.execute ──► resolve cwd ──► resolve sandbox mode ──► 
 
 ### 3.1 为什么用 `agent/created` + scoped `tools.restrict`
 
-- DSH 0.2.1 的 preset 是 `@deepseek-ai/dsh-web-app` 的 patch 文件；没有受支持的“改一个 preset 的某一行”的插件 API（`preset:` patch 只有文档没有实现）。重述整个 preset 会把未来官方新增的行全部丢掉。
+- DSH 0.2.2 的 preset 是 `@deepseek-ai/dsh-web-app` 的 patch 文件；没有受支持的“改一个 preset 的某一行”的插件 API（`preset:` patch 只有文档没有实现）。重述整个 preset 会把未来官方新增的行全部丢掉。
 - `agent.ctx.tools.restrict({ deny: ['pwsh'] })` 是官方 per-agent 作用域机制，只过滤**继承来的**工具，不影响 host / 其他 agent / 子代理（子代理继承父层结果后，`restrict` 因“未知工具”抛错，直接跳过）。
 - `systemPrompt.section({ name: 'tool:pwsh', text: '' })` 同名 scoped section 会 shadow 外层；空文本被丢弃。
 - 监听器在 `agent/created` 上是 **serial + awaited**，注册在返回前完成，模型第一轮就能看到 bash。
@@ -115,7 +117,7 @@ src/
 
 ---
 
-## 4. 契约（0.2.1）
+## 4. 契约（0.2.2）
 
 ### 4.1 替换
 
@@ -172,13 +174,13 @@ type BashValue =
       sandbox?: { mode: string; denied: boolean; enforcement?: string; runnerFailed?: boolean } }
 ```
 
-- `output.presentationMeta(args, value) => ({ cwd: value.cwd })`，0.2.1 会写入 `tool/result.meta`；Web 终端卡片优先读它。
+- `output.presentationMeta(args, value) => ({ cwd: value.cwd })`，0.2.2 会写入 `tool/result.meta`；Web 终端卡片优先读它。
 - `output.render` 产出**恰好一个 text block**：
   - background：`started background job <id>`
-  - promoted：`<output>\n[still running after <t>ms; moved to background job <id>]\n` + 交接提示
+  - promoted：`<output>\n[still running after <t>ms; moved to background job <id>]`（0.2.2 删掉了旧的 “The command keeps running…” 交接句；如何跟进由 `tool:jobs` prompt section 负责。本插件逐字对齐，compat 提示仍在该标记之前）
   - foreground：stdout + `[stderr]` 段 + 标记行
 - 标记（逐字）：`[exit code: N]`、`[killed by signal: X]`、`[timed out after Nms]`、`[stopped: reason]`、`[sandbox: file access denied under <mode> mode]`、`[sandbox: escalation available — retry this exact command once with sandbox_permissions ...]`。
-- **0.2.1 Web UI 不消费 `presentCall`/`presentResult`**；卡片由工具名 `bash`、参数、结果文本标记、`meta.cwd` 反推。presenter 仍实现，供外部 UI bridge。
+- **0.2.2 Web UI 不消费 `presentCall`/`presentResult`**；卡片由工具名 `bash`、参数、结果文本标记、`meta.cwd` 反推。presenter 仍实现，供外部 UI bridge。
 
 ### 4.4 执行器语义
 
@@ -211,7 +213,7 @@ type BashValue =
 - 本插件**不调用** `ctx.sandbox.confine`：MSYS2 在官方 ACL 令牌下无法启动。bash 以当前用户 Medium 令牌直接 spawn。
 - 结果 `sandbox`：
   - 实际完全访问 → `{ mode: 'danger-full-access', denied: false }`
-  - 文本追加 `[bash: running outside the DSH file sandbox — session mode <mode>]`（compat 时）
+  - 文本追加 `[compat: bash runs outside the DSH file sandbox (session mode <mode>)]`（compat 时）
 - read-only：抛错，提示升级到 `workspace-write`（compat 下仍以完全访问执行）或 `danger-full-access`；不得静默。
 
 ---
@@ -336,7 +338,8 @@ interface BashProfile {
 - `/state` 在配置路径无效时返回 `problem`，row 在壳选择下方直接显示，不再只显示“noPath”。
 - 路径 + `msystem` 通过一次 `configForms.mutate` 原子写入，避免中间态。
 - 真机 UI 已验证：Shell 下拉切 Git → `/state` 读回 `git|...|MINGW64`；切回 MSYS2
-  UCRT64 读回一致。截图见 `docs/images/settings-row.png`。
+  UCRT64 读回一致；0.2.2 上再验一次 UI 写入。截图见
+  `docs/images/settings-row-0.2.2.png`。
 - 结果文本使用短标记 `[compat: bash runs outside the DSH file sandbox (session mode …)]`；
   工具描述明确它是**部署提示，不是命令 stderr**。
 
@@ -350,11 +353,21 @@ interface BashProfile {
 
 ## 7. 兼容与升级
 
-- 不解析 DSH 版本号；全部用**服务/方法/字段特性探测**。
+- 运行时**不做版本号分支**；全部用服务/方法/字段特性探测（0.2.x 内向前兼容）。
+  版本把关放在工具链：`engines.dsh`（安装/装载时由 DSH 校验）与 `compatcheck`
+  （开发/升级时对部署产物核对）。
 - 必需：`tools.register/restrict`、`systemPrompt.section`、`subprocess.spawn`、`agent.ctx`。
 - 可选（缺失降级）：`jobs`（无则前台超时即杀）、`workingDirectory`（无则 `session.header.cwd`）、`shellEnv`（无则无 DSH_*）、`approval`/`sandboxPolicy`（无则不 advertise 提权）、`connection`（无则设置行只读状态）、`configForms`（无则设置行只读）。
 - 关键裸字符串（事件名 `agent/created`、`tool/result.meta`、`[exit code:`、`[stderr]`、`jobId` 等）在测试里断言，避免“裸字符串等于没测”。
-- `compatcheck` 脚本：对部署里的 `dsh-tool-bash`/`dsh-agent`/`dsh-jobs` 产物做字符串/形状核对；DSH 升级后跑一次，漂移即报警。
+- `compatcheck` 脚本（0.2.2 基线）：
+  - 从本包 `engines.dsh` 读取 floor，读取部署的 `dsh/package.json` 并拒绝低于 floor 的运行时；
+  - 对 `dsh-tool-bash`、`dsh-agent`、`dsh-system-prompt`、`dsh-tools`、
+    `dsh-sandbox`、`dsh-client-ui-settings`、`dsh-client-ui-settings-general`
+    的部署产物做字符串核对（含 0.2.2 的 promote 模板、8 语言提权文案、Client
+    的 `configForms` / `settings.general.item`）；
+  - DSH 升级后跑一次，漂移即报警。
+- `package.json` 的 `dsh.bundle.platforms: ["win32"]` 让 DSH 0.2.2 在 profile
+  装载前就拒绝/跳过非 Windows Host；`cordis.patch.yml` 的平台闸保留为第二道。
 
 ---
 
@@ -365,9 +378,10 @@ interface BashProfile {
   - 路径：POSIX↔Windows、`/tmp`、相对路径、非法绝对 POSIX。
   - 环境：Git 的 `MSYSTEM=MINGW64`、MSYS2 的 `MSYSTEM=<env>` 与三段 PATH、`msystem`/flavor 不匹配拒绝。
   - 渲染：stdout/stderr 合并、截断、退出码/信号/超时/停止/兼容标记、parseExitStatus。
-  - 提权：参数配对、严格更宽、approval outcome 映射。
+  - 提权：参数配对、严格更宽、approval outcome 映射、8 语言 `displayReason`（en/zh/ja/es/fr/de/ru/pt）。
   - 设置：默认值、volatile 读取、无效路径。
-  - 工具定义：参数/输出 schema 形状、presenter 返回值。
+  - 工具定义：参数/输出 schema 形状、presenter 返回值、promote 文本（无交接句）。
+  - 打包：`dsh.bundle.platforms`、`engines.dsh`/`engines.node` 下限、patch 平台闸。
 - **集成**（无 DSH 进程）：用真实 bash 跑 `executor`，**Git 与 MSYS2 各跑一遍**：
   - `echo`、`pwd`、`exit 3`、stderr、超时、abort、后台 job 的 output/read/kill。
   - **MSYS2 profile**：`echo $MSYSTEM` 必须等于所选环境；`command -v gcc` 命中该环境（若装了 gcc）。
@@ -375,20 +389,21 @@ interface BashProfile {
   - **绝对路径写工作区外成功**（compat 预期）——这是回归测试，提醒我们不能声称沙箱。
   - 启动失败检测（模拟 stderr `*** fatal error - `）。
 - **真机冒烟**（新 DSH 会话）：按 AGENTS §1 的 ①~⑥ 逐条；记录命令与结果。
-  2026-10-18 已在 DSH 0.2.1-rc.2 上跑通：插件加载、`/api` state、`agent/created` 替换、
-  模型工具目录只有 `bash`、真实 `echo LIVE_BASH_OK`、`meta.cwd`。详见 [SMOKE.md](SMOKE.md)。
+  2026-10-18 在 DSH 0.2.1-rc.2、2026-11-06 在 DSH 0.2.2-rc.1 上跑通：插件加载、
+  `/api` state、`agent/created` 替换、模型工具目录只有 `bash`、真实 bash 调用、
+  promote / 后台 / 子智能体与设置行。详见 [SMOKE.md](SMOKE.md)。
 - 不使用 `lib/` 旧构建做验证（checkout 里可能 stale）；以 `src` + 部署运行时为准。
 
 ---
 
 ## 9. 打包与安装
 
-- npm 包名：`@riverzh/dsh-gitbash`（DSH entry id 仍是 `dsh-gitbash`）；`0.1.0` 是内部实现基线，`0.2.0` 是首个公开发布版本，`0.2.1` 为审计修复版，`0.2.2` 修复 Windows 信号/`PWD` 与设置页浅深色；License 为 `GPL-3.0-only`。
+- npm 包名：`@riverzh/dsh-gitbash`（DSH entry id 仍是 `dsh-gitbash`）；`0.1.0` 是内部实现基线，`0.2.0` 是首个公开发布版本，`0.2.1` 为审计修复版，`0.2.2` 修复 Windows 信号/`PWD` 与设置页浅深色，`0.2.3` 同步 DSH 0.2.2 契约；License 为 `GPL-3.0-only`。
 - `package.json`：
   - `"type":"module"`，`main: "lib/index.js"`，`exports: { ".": ..., "./client": ... }`。
-  - `"dsh": { "bundle": { "patch": "./cordis.patch.yml" }, "client": { "platform": "web" } }`。
-  - `"engines": { "node": "^22.19.0 || >=24.0.0", "dsh": ">=0.2.1-0" }`（含 prerelease；不设上界，靠 compatcheck 探测漂移）。
-  - 依赖：`@deepseek-ai/schemastery`；dev：esbuild/typescript/@types。
+  - `"dsh": { "bundle": { "platforms": ["win32"], "patch": "./cordis.patch.yml" }, "client": { "platform": "web" } }`。
+  - `"engines": { "node": ">=24.9.0", "dsh": ">=0.2.2-0" }`（含 prerelease；不设上界，靠 compatcheck 探测漂移）。
+  - 依赖：`@deepseek-ai/schemastery`（`~3.19.0`，与 DSH 0.2.2 的 runtime 一致）；dev：esbuild/typescript/@types。
 - `cordis.patch.yml`：
   ```yaml
   - insert:
@@ -410,7 +425,7 @@ interface BashProfile {
 | Git for Windows / MSYS2 的环境差异（`MSYSTEM`、PATH、多环境共用 bash.exe） | 用 shell profile 区分；`bashPath + msystem` 双字段持久化；不匹配拒绝执行。 |
 | Cygwin 行为差异 | 只做 best-effort，默认不选；UI 标注 experimental。 |
 | 中文 Windows 的 stderr 编码/本地化 | 启动失败检测只认 MSYS 英文签名；其余输出原样展示。 |
-| 设置表单在 0.2.1 的 `mode` 字段缺失 | 只用 `status/value/revision/writable`，不读 `mode`。 |
+| 设置表单的 `mode` 字段缺失（0.2.1 起） | 只用 `status/value/revision/writable`，不读 `mode`。 |
 | 后台 job 在无 controller 的组合里不可用 | feature-detect；admission 失败退回前台 deadline kill。 |
 | `minimal` preset 的 persistent shell 被隐藏后模型失去“持久状态” | 明示 one-shot 语义；不承诺持久 shell（README 写清）。 |
 | 安全：compat 下 bash 完全访问 | 红字 + 结果标记 + read-only 拒绝 + strict 可选；不静默。 |
@@ -430,7 +445,9 @@ interface BashProfile {
 
 ---
 
-## 12. 真机验证（2026-10-18）
+## 12. 真机验证
+
+### 12.1 2026-10-18，DSH `0.2.1-rc.2`（历史基线）
 
 | 项 | 结果 |
 |---|---|
@@ -448,3 +465,25 @@ interface BashProfile {
 | Git UI 卡片 | ✅ 与 MSYS2 同一 `bash` 契约；事件/`meta.cwd` 逐条核对，未单独截图 |
 
 复跑步骤与原始事件见 [SMOKE.md](SMOKE.md)。测试 profile/端口均为独立实例，不影响桌面会话。
+
+### 12.2 2026-11-06，DSH `0.2.2-rc.1`（当前基线）
+
+测试 profile `gitbash-022`（web 模板 + `link:D:/GitHub/dsh-gitbash-new`，插件 `0.2.3`），
+端口 `56123`；每个场景独立会话；真机为 DSH Desktop 自带 CLI `0.2.2-rc.1`。
+
+| 项 | 结果 |
+|---|---|
+| 装载 / 发现 / 路由 | ✅ `apply` + 7 个 profile + 3 条 `/api` 路由；`/state` 返回 effective `git|...|MINGW64` |
+| 模型工具目录 | ✅ 32 个工具中含 `bash`；`pwsh` 命中 0；`tool:bash` 提示词存在、无 PowerShell |
+| 真实命令 | ✅ `echo LIVE022_OK; echo MSYSTEM=$MSYSTEM; pwd` → `LIVE022_OK` / `MINGW64` / `/d/...` |
+| `meta.cwd` | ✅ `D:\GitHub\dsh-gitbash-new` |
+| promote（0.2.2 新文本） | ✅ `timeoutMs:1500` + `sleep 5` → `PROMOTE_BEFORE` + compat 行 + `[still running after 1500ms; moved to background job …]`，**无**交接句 |
+| 后台 + `job_output` | ✅ job `bash-…` → `BG022_OK`，`[status: completed, exit code: 0]` |
+| 子智能体 | ✅ child `5d5dc315-…` 内 `bash` 可用；`SUB022_OK`；`send_message` 回父会话 |
+| 设置行（真实 Chromium） | ✅ 标题、Git/MSYS2 选择、兼容、红字、高级诊断、`当前版本：0.2.2-rc.1` 全部渲染 |
+| 设置写入 | ✅ UI 切到 MSYS2 UCRT64 → `/state` 读回 `bashPath=C:\msys64\usr\bin\bash.exe`、`msystem=UCRT64`；新会话 `MSYSTEM=UCRT64` |
+| 兼容告警 | ✅ workspace-write 会话每结果带 `[compat: ...]`；read-only/strict 仍由单元测试覆盖（未在 0.2.2 UI 上重点） |
+| compatcheck | ✅ 运行时 `0.2.2-rc.1`（floor `0.2.2-0`），7 组 Host/Client 契约 token 全过 |
+
+未覆盖：0.2.2 上重跑“受限令牌启动 MSYS2”（见 §2.1 源码级复核）、read-only/strict 的
+实机点击、浅色主题截图（0.2.1 已有，0.2.2 设置行渲染路径未变）。

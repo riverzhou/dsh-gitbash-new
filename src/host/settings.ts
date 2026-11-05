@@ -1,7 +1,7 @@
 /**
  * The plugin's entry Config (the settings row) and its pure resolver.
  *
- * DSH 0.2.1 settings = the plugin's own profile-entry Config, namespace = entry
+ * DSH 0.2.2 settings = the plugin's own profile-entry Config, namespace = entry
  * id (`dsh-gitbash`). Only `.volatile()` fields are projected into the settings
  * form and may be written at runtime; the Loader updates those references in
  * place, so `apply` reads a fresh value on every `agent/created` without a

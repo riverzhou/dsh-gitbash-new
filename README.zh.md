@@ -8,7 +8,7 @@
 
 本文是完整使用手册：安装、日常用法、安全边界、设置、排障与开发。
 
-> **最低 DSH：0.2.1。** 仅 Windows 10/11。替换只对**新会话**生效；已存在的会话
+> **最低 DSH：0.2.2。** 仅 Windows 10/11。替换只对**新会话**生效；已存在的会话
 > 保持创建时的工具目录。
 
 ---
@@ -61,8 +61,8 @@
 - **显式安全**：绝不静默放宽权限——`workspace-write` 下以完全访问运行并在结果里
   标注 `[compat: ...]`，`read-only` 拒绝，`strict` 只允许 `danger-full-access`。
   详见[安全边界](#安全边界先读)。
-- **已验证**：75 个单元/集成用例，加上 Git 与 MSYS2 的真机冒烟（直连、后台、
-  子智能体；设置页浅色与深色）。
+- **已验证**：82 个单元/集成用例，加上 DSH `0.2.2-rc.1` 上的 Git 与 MSYS2 真机
+  冒烟（直连、promote、后台、子智能体；真实 Web UI 设置行）。
 
 ---
 
@@ -70,10 +70,10 @@
 
 | 项 | 要求 |
 |---|---|
-| DSH | `>= 0.2.1`（已在桌面运行时 `0.2.1-rc.2` 实测） |
+| DSH | `>= 0.2.2`（已在桌面运行时 `0.2.2-rc.1` 实测） |
 | Windows | Windows 10/11 x64；MSYS2 arm64 环境也可用 |
 | bash 提供方 | Git for Windows 和/或 MSYS2 |
-| Node.js | `^22.19.0` 或 `>=24`，仅构建/开发需要 |
+| Node.js | `>= 24.9`，仅构建/开发需要（DSH 0.2.2 的工作区下限） |
 | 可选 | Cygwin，best-effort，不推荐 |
 
 - Git Bash 与 MSYS2 共用 MSYS2 运行时；该运行时无法在 DSH 的 Windows ACL 沙箱中
@@ -88,13 +88,13 @@
 
 ### 使用 DSH Desktop 自带的 CLI
 
-**不要**用 npm 全局的旧 `dsh`（例如 `0.1.7`），它不认识 0.2.1 的
+**不要**用 npm 全局的旧 `dsh`（例如 `0.1.7`），它不认识 0.2.2 的
 plugin/profile 契约。使用桌面安装目录里的 CLI：
 
 ```bat
 set "DSH_CLI=%LOCALAPPDATA%\Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd"
 %DSH_CLI% --version
-:: 应为 0.2.1-rc.2 或更高
+:: 应为 0.2.2-rc.1 或更高
 ```
 
 修改 profile 前先**完全退出 DSH Desktop**。
@@ -116,7 +116,7 @@ set "DSH_CLI=%LOCALAPPDATA%\Programs\DeepSeek Harness\resources\runtime\cli\bin\
 ### 从 npm 安装（已发布）
 
 ```bat
-%DSH_CLI% plugin --profile desktop add @riverzh/dsh-gitbash@0.2.2
+%DSH_CLI% plugin --profile desktop add @riverzh/dsh-gitbash@0.2.3
 ```
 
 最新版可用 `@riverzh/dsh-gitbash@latest`。
@@ -165,7 +165,7 @@ set "DSH_CLI=%LOCALAPPDATA%\Programs\DeepSeek Harness\resources\runtime\cli\bin\
 
 设置页长这样：
 
-![设置页：终端工具](docs/images/settings-row.png)
+![设置页：终端工具](docs/images/settings-row-0.2.2.png)
 
 Shell、兼容模式和 MSYS2 环境下拉都跟随 DSH 的浅色/深色 surface token，闭控件和
 展开列表都保持可读：
@@ -427,7 +427,7 @@ WSL 一律排除：`System32\bash.exe`、`Sysnative`、`WindowsApps`、`\\wsl$`�
 | 现象 | 处理 |
 |---|---|
 | 设置页说没找到 bash | 安装 Git for Windows 或 MSYS2；点 **刷新**；或手填 `<root>\usr\bin\bash.exe`（不要加引号） |
-| 新会话仍有 `pwsh` | 确认 DSH `>= 0.2.1`、插件在 profile bundles 里、DSH 已重启；看 `%TEMP%\dsh-gitbash.log` 的 `replace:` |
+| 新会话仍有 `pwsh` | 确认 DSH `>= 0.2.2`、插件在 profile bundles 里、DSH 已重启；看 `%TEMP%\dsh-gitbash.log` 的 `replace:` |
 | 只有旧会话没有 bash | 替换按 agent 生效；新建会话。子代理从父会话继承 |
 | Git 会话显示 `MSYSTEM=UCRT64` | 旧 `bin\bash.exe` 路径/旧构建；用自动/刷新；当前构建会归一化到 `usr\bin\bash.exe` |
 | MSYS2 环境不存在 | 在 MSYS2 里安装该环境；profile 只列出 `bin` 存在的环境 |
@@ -455,7 +455,8 @@ WSL 一律排除：`System32\bash.exe`、`Sysnative`、`WindowsApps`、`\\wsl$`�
   `/discover`、`/validate` 也是客户端接口，不是公开无认证 API。
 - **DSH 开发者工具**：查看原始 session 事件、消息分组和 Node 后端，是 job /
   子智能体卡片的最终依据。
-- **契约核对**：`pnpm compatcheck` 对比部署的官方 bundle 与本插件依赖的字符串。
+- **契约核对**：`pnpm compatcheck` 读取已安装运行时版本、执行插件的
+  `engines.dsh` 下限，并对比部署的官方 Host / Client bundle 与本插件依赖的字符串。
 
 完整的真机原始事件见 [docs/SMOKE.md](docs/SMOKE.md)。
 
@@ -463,7 +464,7 @@ WSL 一律排除：`System32\bash.exe`、`Sysnative`、`WindowsApps`、`\\wsl$`�
 
 ## 兼容与升级
 
-- 最低 DSH **0.2.1**。插件只使用官方服务的结构性投影（`ctx.subprocess`、
+- 最低 DSH **0.2.2**。插件只使用官方服务的结构性投影（`ctx.subprocess`、
   `ctx.jobs`、`ctx.sandboxPolicy`、`ctx.shellEnv`、`ctx.workingDirectory`、
   `ctx.approval`、`ctx.configForms` 等），不 import 私有 DSH 包。
 - 关键集成点：`agent/created`、`tools.restrict`、`tool:bash` / `tool:pwsh` 的
@@ -474,12 +475,13 @@ WSL 一律排除：`System32\bash.exe`、`Sysnative`、`WindowsApps`、`\\wsl$`�
   2. `pnpm test`
   3. 改了 `src/` 就 `pnpm build`；提交的 `lib/` 必须与 `src/` 同步
   4. 重启 DSH，硬刷新 Web UI
-- 非 Windows 不注册任何行为（`cordis.patch.yml` 在
-  `process.platform !== 'win32'` 时禁用 entry）。
+- 非 Windows 不注册任何行为：`package.json` 声明
+  `dsh.bundle.platforms: ["win32"]`（DSH 0.2.2 的 Host 准入），
+  `cordis.patch.yml` 再在 `process.platform !== 'win32'` 时禁用 entry。
 
-**2026-10-18 真机验证**：DSH `0.2.1-rc.2`、Git for Windows 2.56、MSYS2
-5.3.20（UCRT64）；直接 bash、后台任务、子智能体、设置页切换和原生 UI 卡片均已
-跑过。原始事件见 [docs/SMOKE.md](docs/SMOKE.md)。
+**2026-11-06 真机验证**：DSH `0.2.2-rc.1`、Git for Windows 2.56、MSYS2
+5.3.20（UCRT64）；直接 bash、promote、后台任务、子智能体与真实设置行
+（通过 UI 切到 MSYS2）均已跑过。原始事件见 [docs/SMOKE.md](docs/SMOKE.md)。
 
 ---
 
@@ -489,7 +491,7 @@ WSL 一律排除：`System32\bash.exe`、`Sysnative`、`WindowsApps`、`\\wsl$`�
 pnpm install
 pnpm build        # lib/index.js + lib/client.js
 pnpm check        # tsc --noEmit
-pnpm test         # node:test；75 个用例，含真实 Git/MSYS2（存在时）
+pnpm test         # node:test；82 个用例，含真实 Git/MSYS2（存在时）
 pnpm selftest     # 纯逻辑自测，不需要 DSH
 pnpm compatcheck  # 对已安装 DSH 做契约字符串核对
 ```
@@ -522,9 +524,10 @@ pnpm test
 pnpm pack
 ```
 
-npm 包名 `@riverzh/dsh-gitbash`（DSH entry id 仍是 `dsh-gitbash`），`engines.dsh = ">=0.2.1-0"`，`engines.node = "^22.19.0 || >=24.0.0"`。
+npm 包名 `@riverzh/dsh-gitbash`（DSH entry id 仍是 `dsh-gitbash`），`engines.dsh = ">=0.2.2-0"`，`engines.node = ">=24.9.0"`。
 包含 host 入口、client bundle、`lib/`、`src/`、`cordis.patch.yml`、docs 与两份
-README。
+README。`dsh.bundle.platforms` 把 bundle 限定在 Windows，非 Windows 的 DSH 在读
+patch 之前就会跳过它。
 
 ---
 

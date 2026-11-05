@@ -114,15 +114,20 @@ export function renderResult(result: ForegroundValue): string {
   return body + notes.join('\n')
 }
 
-/** Render a foreground call that stopped waiting and moved to a background job. */
+/**
+ * Render a foreground call that stopped waiting and moved to a background job.
+ *
+ * 0.2.2 dropped the trailing hand-off guidance from the official renderer: the
+ * `tool:jobs` prompt section owns how to follow up, and repeating it here made
+ * every promoted result longer than the official one. Keep the marker, drop the
+ * sentence.
+ */
 export function renderPromoted(promoted: PromotedValue): string {
   const body = promoted.output.length > 0
     ? promoted.output.endsWith('\n') ? promoted.output : `${promoted.output}\n`
     : ''
   const compat = compatNote(promoted)
-  return `${body}${compat !== undefined ? `${compat}\n` : ''}[still running after ${promoted.timeoutMs}ms; moved to background job ${promoted.jobId}]\n`
-    + 'The command keeps running in the background. You will be notified when it finishes; '
-    + 'read newer output with job_output, stop it with job_kill.'
+  return `${body}${compat !== undefined ? `${compat}\n` : ''}[still running after ${promoted.timeoutMs}ms; moved to background job ${promoted.jobId}]`
 }
 
 /** Render a background job's later output read (used by job tools, not this tool). */

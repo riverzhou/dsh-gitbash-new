@@ -119,7 +119,7 @@ export { composeEnv, composePath, posixToWindows, resolveWorkdir, ENV_OVERRIDES 
 export { createBashExecution, clampTimeout, normalizeWindowsExit, EXEC_DEFAULTS, BashSpawnError } from './host/executor.ts'
 export { createBashTool } from './host/bash-tool.ts'
 export { renderResult, renderPromoted, parseExitStatus, compatNote } from './host/render.ts'
-export { approveEscalation, ESCALATION_TARGETS, WIDER_MODES, validateEscalationArgs, sandboxPermissionsDescription, sandboxDenialMarker, escalationHintMarker } from './host/escalation.ts'
+export { approveEscalation, escalationDisplayReason, ESCALATION_TARGETS, WIDER_MODES, validateEscalationArgs, sandboxPermissionsDescription, sandboxDenialMarker, escalationHintMarker } from './host/escalation.ts'
 export { registerReplacement, replaceTerminalTool, probeCapability, PWSH_TOOL_NAME } from './host/replace.ts'
 export { registerRoutes } from './host/routes.ts'
 export { diag, diagFile } from './host/diag.ts'

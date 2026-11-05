@@ -1,8 +1,11 @@
 # dsh bundle patch: install this plugin into the profile tree.
 #
-# The platform gate is the same shape the official bash-sandbox / tool-pwsh rows
-# use: off Windows, the host half never applies and the client bundle never
-# enters the startup graph.
+# Two platform gates, in this order:
+# 1. package.json `dsh.bundle.platforms: ["win32"]` — DSH 0.2.2 refuses or skips
+#    the bundle on every non-Windows Host before this file is read.
+# 2. this row's `disabled` — the same shape the official bash-sandbox /
+#    tool-pwsh rows use, so the host half never applies and the client bundle
+#    never enters the startup graph off Windows.
 - insert:
     - id: dsh-gitbash
       name: '@riverzh/dsh-gitbash'

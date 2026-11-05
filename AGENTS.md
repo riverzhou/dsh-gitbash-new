@@ -6,7 +6,7 @@
 
 ---
 
-## 0. 当前状态（2026-10-18 实测）
+## 0. 当前状态（2026-11-06 实测）
 
 | 项 | 实测值 |
 |---|---|
@@ -15,10 +15,10 @@
 | 文件 | 插件源码 + 构建产物 `lib/` + 文档/测试/脚本（见 §3） |
 | 源码 / 技术栈 | TypeScript（host ESM + client bundle）+ esbuild；`lib/` 已构建并入库 |
 | 项目定位 | ✅ **已确定并实现**（见 §1；设计见 `docs/DESIGN.md`） |
-| 版本 / 许可 | `0.2.2` / `GPL-3.0-only` |
-| 验证 | `pnpm test` 75/75；`pnpm selftest` 10/10；`pnpm compatcheck` 通过；DSH 0.2.1-rc.2 真机：Git + MSYS2 的 direct/background/subagent、UI 卡片与设置切换均通过；Windows 信号与 `PWD` 回归、设置页浅色/深色下拉均通过（`docs/SMOKE.md`） |
+| 版本 / 许可 | `0.2.3` / `GPL-3.0-only` |
+| 验证 | `pnpm test` 82/82；`pnpm selftest` 10/10；`pnpm compatcheck` 通过（运行时 `0.2.2-rc.1`，floor `>=0.2.2-0`）；DSH 0.2.2-rc.1 真机：Git + MSYS2 的 direct/promote/background/subagent、真实设置行与 UI 切换均通过（`docs/SMOKE.md`） |
 | 平台 | Windows 10（19045）/ Git for Windows 2.56（bash 5.3.15）/ MSYS2 5.3.20（UCRT64） |
-| 运行时 | Node v24.21.0；DSH 桌面运行时 `0.2.1-rc.2` |
+| 运行时 | Node v24.21.0；DSH 桌面运行时 `0.2.2-rc.1` |
 | 已知硬约束 | Git Bash/MSYS2 无法在 DSH Windows ACL 沙箱内启动；兼容模式策略见 §1 与 README |
 
 **构建/测试命令**：`pnpm install` → `pnpm build` → `pnpm check` → `pnpm test` → `pnpm selftest` → `pnpm compatcheck`。
@@ -28,7 +28,7 @@
 
 ### 0.1 `/init` 不是 DSH 内置命令（实测）
 
-- DSH `0.2.1-rc.2` 注册的内置斜杠命令只有：`/compact`、`/feedback`、`/goal`、`/plan`、`/export`。`/init` 不在其中，会被当作**普通消息**送到模型。
+- DSH `0.2.1-rc.2` 的实测与 `0.2.2-rc.1` 源码核对都表明：`/init` 不是 DSH 内置命令（源码中没有该命令的注册），会被当作**普通消息**送到模型。
 - 在本工作区，所有者用 `/init` 表达：**初始化或维护本仓库的 AGENTS.md**。
 - 因此接到 `/init` 时：
   1. 先核对仓库现状与本文档；
@@ -44,8 +44,8 @@
 | 一句话目标 | 在 Windows 上给 DSH 一个**完整可用的 bash 终端环境**：用 **Git for Windows 或 MSYS2**（可选）取代默认 pwsh，同时保留 DSH 官方终端工具的全部行为（cwd / 后台任务 / 超时转后台 / 沙箱与提权 / 终端卡片 / PTC）。 |
 | 交付物 | 一个可安装的 DSH 双面插件：host 半区（Git/MSYS2 profile 发现与校验、bash 工具、沙箱兼容、设置路由）+ client 半区（设置页、自动发现、MSYS2 环境选择、状态与诊断）；配套测试、中英 README、CHANGELOG、设计/冒烟文档。 |
 | 明确不做的事 | 不改 DSH 源码/安装文件；不自动选 WSL 的 bash；不引入自定义 preset；不接管 `ctx.shell`（pwsh 保留）；Linux/macOS 上不注册任何行为。 |
-| 技术栈 | TypeScript（host ESM + client bundle）、esbuild、官方 `ctx` 服务契约（结构性窄化，不 import 官方包）；Node `^22.19.0 || >=24.0.0`。 |
-| 最低 DSH | **0.2.1**（以 0.2.1-rc.2 的源码与桌面运行时为基线；用特性探测兼容 0.2.x）。 |
+| 技术栈 | TypeScript（host ESM + client bundle）、esbuild、官方 `ctx` 服务契约（结构性窄化，不 import 官方包）；Node `>=24.9.0`。 |
+| 最低 DSH | **0.2.2**（以 0.2.2-rc.1 的源码与桌面运行时为基线；用特性探测读取 0.2.x 服务）。 |
 | 「怎么算做完」 | ① 新会话的模型工具目录里**只有 `bash`、没有 `pwsh`**，且 bash 命令能真实执行（真机已验证）；② **安全决策如实落地**：`workspace-write` 下 bash 以完全访问运行并在结果/设置页显式标注，`read-only` 拒绝，文件工具仍受官方沙箱（真机已验证 workspace-write；read-only/strict 由单元测试覆盖）；③ `workdir` / 后台任务 / 超时转后台 / 沙箱提权 / 终端卡片与官方 tool-bash 逐项对齐（单测 + 真机 tool call/meta.cwd）；④ 设置页能自动发现、校验、持久化 **Git 与 MSYS2** profile；⑤ 单元/集成测试与真机冒烟全绿；⑥ 安装/卸载/升级路径有文档。 |
 
 > **验收口径**：上面的 ①~⑥ 每条都要有可复现的检验步骤；无法检验的条目不算完成。
@@ -95,7 +95,7 @@ dsh-gitbash-new/
 │   ├── index.ts           # host 入口：apply / Config / 路由 / 替换 / 纯逻辑导出
 │   ├── shared/protocol.ts # host/client 共用 wire 常量与类型
 │   ├── host/
-│   │   ├── types.ts       # DSH 0.2.1 契约的结构性窄化（不 import 官方包）
+│   │   ├── types.ts       # DSH 0.2.2 契约的结构性窄化（不 import 官方包）
 │   │   ├── settings.ts    # schemastery Config（volatile）
 │   │   ├── discover.ts    # Git/MSYS2/Cygwin profile 发现、WSL 排除、校验
 │   │   ├── env.ts         # MSYSTEM/PATH 隔离、POSIX↔Windows、workdir
@@ -116,7 +116,7 @@ dsh-gitbash-new/
 │       └── types.ts       # 客户端契约窄化
 ├── tests/
 │   ├── helpers/           # fake / real subprocess
-│   └── *.test.mjs         # 75 个 node:test 用例（含真实 Git/MSYS2 集成）
+│   └── *.test.mjs         # 82 个 node:test 用例（含真实 Git/MSYS2 集成）
 ├── scripts/
 │   ├── selftest.mjs       # 纯逻辑自测
 │   └── compatcheck.mjs    # 对 app.asar 里的官方产物做契约字符串核对
@@ -188,7 +188,7 @@ dsh-gitbash-new/
 8. **升级**：DSH 升级后跑 `pnpm compatcheck`；裸字符串（事件名、标记、meta.cwd、
    `tool:bash`）在测试里断言，避免“裸字符串等于没测”。
 9. **设置**：entry Config + `.volatile()`；namespace = entry id `dsh-gitbash`；
-   `configForms.get(entryId)`；不要再读 0.2.1 已删除的 `snapshot.mode`。
+   `configForms.get(entryId)`；不要读 0.2.1 起已删除的 `snapshot.mode`。
 10. **JS/TS**：host 是 Node ESM、client 是经典 CJS 工厂；client 只允许 require
     react / react/jsx-runtime 等页面种子模块；client 入口必须声明 `inject`。
 11. **Git 的 `bin\bash.exe` 是 launcher**：会按安装自带的 UCRT64 重置 `MSYSTEM`/PATH，
@@ -205,3 +205,16 @@ dsh-gitbash-new/
     `<option>` 必须同时用 `--dsw-alias-bg-layer-2` / `--dsw-alias-brand-text`
     上色（fallback `Canvas`/`CanvasText`），否则深色主题会白底白字。浅色/深色
     真机截图见 `docs/SMOKE.md`。
+15. **0.2.2 的 promote 文本**：官方 `renderPromoted` 去掉了 “The command keeps
+    running…” 交接句，只留 `[still running after <t>ms; moved to background job <id>]`；
+    交接说明归 `tool:jobs` prompt section。本插件逐字对齐；compat 提示仍在标记之前。
+16. **bundle 平台声明**：0.2.2 在 profile 装载前校验
+    `package.json.dsh.bundle.platforms`（省略 = 全平台）。本插件声明 `["win32"]`，
+    `cordis.patch.yml` 的 `process.platform !== 'win32'` 是第二道闸；非 Windows
+    上 bundle 根本不会进入 patch 读取阶段。
+17. **提权文案的 8 语言**：0.2.2 的 `escalationDisplayReason` 提供
+    en/zh/ja/es/fr/de/ru/pt。本插件的 `escalationDisplayReason` 必须与官方逐字一致
+    （`tests/escalation.test.mjs` 断言），否则非中英界面会掉回英文。
+18. **compatcheck 的版本下限**：脚本从本包 `engines.dsh` 推导 floor（当前
+    `>=0.2.2-0`），读取部署的 `dsh/package.json`，低于 floor 直接失败；不要
+    在脚本里另写一份版本号。

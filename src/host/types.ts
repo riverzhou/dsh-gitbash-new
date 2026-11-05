@@ -4,7 +4,7 @@
  * Third-party plugins cannot import `@deepseek-ai/*` host packages: the profile
  * installs only the plugin's own dependencies, and the host runtime lives
  * inside the DSH installation. Every shape below is therefore a *narrowed
- * projection* of the 0.2.1 runtime contract, not an import. When DSH changes a
+ * projection* of the 0.2.2 runtime contract, not an import. When DSH changes a
  * shape, `scripts/compatcheck.mjs` should fail and this file is the one place
  * to update.
  *
