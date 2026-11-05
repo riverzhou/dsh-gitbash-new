@@ -70,9 +70,10 @@ usage, the security model, settings, troubleshooting and development.
   runs bash unconfined and labels the result with `[compat: ...]`, `read-only`
   refuses, and `strict` allows only `danger-full-access`. See
   [Security model](#security-model-read-this-first).
-- **Verified**: 82 unit and integration tests, plus real-machine smoke on DSH
+- **Verified**: 90 unit and integration tests, plus real-machine smoke on DSH
   `0.2.2-rc.1` with Git and MSYS2 (direct, promoted, background and subagent
-  calls; the settings row in the real Web UI).
+  calls; 31/31 scenario checks and 15/15 settings-page checks in the 0.2.4
+  audit round, including strict refusal).
 
 ---
 
@@ -126,7 +127,7 @@ Reopen DSH, then hard-refresh the Web UI (`Ctrl+Shift+R`).
 ### From npm (published)
 
 ```bat
-%DSH_CLI% plugin --profile desktop add @riverzh/dsh-gitbash@0.2.3
+%DSH_CLI% plugin --profile desktop add @riverzh/dsh-gitbash@0.2.4
 ```
 
 Use `@riverzh/dsh-gitbash@latest` for the newest release.
@@ -182,7 +183,7 @@ skips because `pwsh` is no longer restrictable. The log contains
 
 The settings row looks like this:
 
-![Settings row: terminal tool](docs/images/settings-row-0.2.2.png)
+![Settings row: terminal tool](docs/images/settings-row-0.2.4.png)
 
 The Shell, Compatibility and MSYS2-environment dropdowns use the DSH light/dark
 surface tokens, so both the closed control and the open list stay readable:
@@ -213,7 +214,8 @@ The plugin therefore makes the trade-off **explicit**:
   paths outside the workspace as read-only unless the user explicitly asks
   otherwise.
 - The plugin never silently widens permissions. The warning is always in the
-  settings row, the tool description, the system prompt and the result text.
+  settings row, the tool description and the system prompt; every unconfined
+  result also carries the `[compat: ...]` note.
 - `read-only` deliberately refuses rather than breaking the read-only promise.
 - `strict` is for security-sensitive users: bash is available only under
   `danger-full-access`.
@@ -335,7 +337,8 @@ MSYS2 environment and PATH rules.
 | Cygwin | `Cygwin` (experimental) | unset | `<root>\bin\bash.exe` |
 
 - **Auto** prefers Git for Windows; without Git it picks the best installed
-  MSYS2 environment (`UCRT64` first, then `MINGW64`, `CLANG64`, `MSYS`).
+  MSYS2 environment (`UCRT64` first, then `MINGW64`, `CLANG64`, `CLANGARM64`,
+  `MINGW32`, `MSYS`).
 - Git for Windows has exactly one profile. MSYS2 has one profile **per
   installed environment**; all share the same `usr\bin\bash.exe`, so
   `bashPath` alone cannot distinguish them — `msystem` is persisted too.
@@ -418,8 +421,9 @@ Configuration is stored in the profile's `cordis.patch.yml`:
 ```
 
 - `bashPath: ''` means auto.
-- `msystem` is `auto` or a concrete MSYS2 environment; Git ignores it and uses
-  `MINGW64`.
+- `msystem` is `auto` or a concrete MSYS2 environment. A Git profile accepts
+  only `auto` / `MINGW64`; any other value is reported as an invalid profile
+  instead of being silently ignored.
 - `compat` is `auto` or `strict`.
 - Settings are read when a new agent is created. **Existing sessions are not
   retrofitted**; start a new session (subagents inherit from their parent).
@@ -486,7 +490,7 @@ UCRT64, you are probably running an older plugin build or a stale session.
 | `job_kill` / `job_output` missing | They are separate DSH tools, not part of bash; ensure the jobs tool group is in the preset |
 | Settings row is missing | DSH too old, plugin not loaded, or the Web client was not rebuilt/refreshed; restart DSH and hard-refresh |
 | Cannot find the Git/MSYS2 selector, or changing it does not affect this session | The selector is only in **Settings → General → Terminal tool (Git Bash / MSYS2)**; the built-in **Terminal** card is the separate UI-terminal plugin. Changes persist immediately but apply to **new sessions** only |
-| Path with spaces fails | Enter the path without surrounding quotes; the settings form stores it verbatim |
+| Path has spaces | Enter the absolute path; surrounding single/double quotes are tolerated and stripped |
 | WSL bash is not listed | Intentional; WSL cannot be driven through this profile/environment model |
 | Output seems cut off | Long output is tail-truncated; use the reported spill path for the full file |
 
@@ -517,6 +521,10 @@ For a full real-machine transcript, see [docs/SMOKE.md](docs/SMOKE.md).
   services (`ctx.subprocess`, `ctx.jobs`, `ctx.sandboxPolicy`, `ctx.shellEnv`,
   `ctx.workingDirectory`, `ctx.approval`, `ctx.configForms`, etc.) and does not
   import private DSH packages.
+- Replacement needs `ctx.subprocess.spawn` **and** `ctx.sandboxPolicy.resolve`:
+  bash is spawned outside DSH's confinement, so the policy service is the only
+  source of the session mode. If either is missing, the plugin keeps the
+  preset's `pwsh` and the settings row shows the missing capability.
 - `agent/created`, `tools.restrict`, `tool:bash` / `tool:pwsh` section names,
   result markers and `meta.cwd` are the critical integration points. A wrong
   event name would be a silent no-op, so the test suite asserts the strings.
@@ -531,9 +539,10 @@ For a full real-machine transcript, see [docs/SMOKE.md](docs/SMOKE.md).
   `cordis.patch.yml` disables the entry when `process.platform !== 'win32'`.
 
 **Verified on 2026-11-06:** DSH `0.2.2-rc.1`, Git for Windows 2.56 and MSYS2
-5.3.20 (UCRT64); direct bash, promoted results, background jobs, subagents and
-the real settings row (MSYS2 switch through the UI) were exercised. Raw events:
-[docs/SMOKE.md](docs/SMOKE.md).
+5.3.20 (UCRT64); direct bash, promoted results, background jobs, subagents,
+SIGTERM normalization, relative workdir, strict refusal and the real settings
+row (MSYS2 switch through the UI) were exercised — 31/31 scenario checks and
+15/15 UI checks on a clean browser load. Raw events: [docs/SMOKE.md](docs/SMOKE.md).
 
 ---
 
@@ -543,14 +552,15 @@ the real settings row (MSYS2 switch through the UI) were exercised. Raw events:
 pnpm install
 pnpm build        # lib/index.js + lib/client.js
 pnpm check        # tsc --noEmit
-pnpm test         # node:test; 82 tests, including real Git/MSYS2 when present
+pnpm test         # node:test; 90 tests, including real Git/MSYS2 when present
 pnpm selftest     # pure-logic checks, no DSH needed
 pnpm compatcheck  # contract-string check against the installed DSH
 ```
 
 Real integration tests discover local Git/MSYS2 installations and skip when
 absent. They exercise `MSYSTEM`, PATH isolation, exit codes, stderr, real child
-bash, timeout and the expected unconfined write behaviour.
+bash, timeout, real `SIGTERM`/`SIGKILL` encoding, the optional MSYS2 toolchain
+and the expected unconfined write outside the workspace.
 
 ### Layout
 

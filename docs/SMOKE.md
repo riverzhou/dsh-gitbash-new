@@ -1,4 +1,4 @@
-# 真机冒烟记录 — 2026-10-18（0.2.1-rc.2）/ 2026-11-06（0.2.2-rc.1）
+# 真机冒烟记录 — 2026-10-18（0.2.1-rc.2）/ 2026-11-06（0.2.2-rc.1；0.2.4 审计回归）
 
 > 目标：在**真实的 DSH** 里验证插件加载、设置路由、per-agent 替换、
 > 模型工具目录、bash 执行与 `meta.cwd`。不是单元测试的替代品；可复跑。
@@ -420,3 +420,56 @@ compatcheck ok
 - 浅色主题截图沿用 0.2.1 的设置行渲染路径；0.2.2 本轮只截深色。
 - 测试 profile `gitbash-022` 已在验证后删除；桌面 profile 仍使用 npm 上已发布的
   `0.2.2`，未在验证中改动。复跑按上面的步骤重建。
+
+---
+
+## 0.2.4 审计回归（2026-11-06）
+
+> 目的：在 0.2.3 发布后的全面代码/文档审计中，用**最终构建**重跑关键路径，并补上
+> 之前只由单测覆盖的 strict、信号、workdir 与真实设置页。独立 profile
+> `gitbash-audit`（web 模板 + `link:` 当前仓库），端口 `56124`。
+
+### 自动化场景（31/31）
+
+自写 Node 驱动器逐个会话发送精确 prompt，按 `session/page` 事件断言：
+
+```text
+31/31 checks passed
+```
+
+| 场景 | 断言 |
+|---|---|
+| state / discover / validate | supported=true；7/7 profile 探测到版本；有效路径返回 profile；无效路径返回 problem |
+| Git 直连 | 工具目录含 `bash`、无 `pwsh`；`AUDIT_GIT_OK` / `MSYSTEM=MINGW64` / `/d/...`；`meta.cwd`；无 exit marker |
+| promote | `PROMOTE_START`；`[still running after 1000ms; moved to background job bash-…]`；无交接句；compat 在标记前 |
+| 后台 + `job_output` | `started background job`；`AUDIT_BG_OK`；`[status: completed, exit code: 0]` |
+| 信号 | `SIGNAL_BEFORE`；`[killed by signal: SIGTERM]`；无 `exit code: 3840` |
+| 相对 workdir | 模型传 `workdir: "src"`；`pwd` 与 `meta.cwd` 都在 `<workspace>\src` |
+| 子智能体 | child 会话工具目录含 `bash`、无 `pwsh`；`AUDIT_CHILD_OK`；父会话收到 `send_message` |
+
+### 设置页（真实 Chromium，干净加载，15/15）
+
+```text
+15/15 checks passed
+```
+
+![0.2.4 审计回归：设置行（MSYS2 UCRT64，深色）](images/settings-row-0.2.4.png)
+
+- 行渲染：三组下拉（Shell 8 项 / 兼容 2 项 / MSYS2 7 项）、红字提示、高级诊断。
+- UI 切到 `MSYS2 UCRT64` → `/state` 读回
+  `bashPath=C:\msys64\usr\bin\bash.exe`、`msystem=UCRT64`；新会话
+  `FINAL_MSYS2_OK` / `MSYSTEM=UCRT64`。
+- UI 切 `严格模式` → `/state` 读回 `compat=strict`；新会话调用 bash 返回
+  `bash cannot run under the Windows file sandbox…`（命令未执行）。再切回
+  `兼容模式`，`/state` 读回 `compat=auto`。
+- 高级诊断：`平台 win32 / 沙箱能力 workspace-write / 后台任务 可用 / 最近替换 已替换`。
+- 干净加载无 console 错误、无失败请求。测试过程中一次“同页导航到新 token”的
+  stale-page 复现会在 DSH 客户端出现 `sessions service unavailable`；换全新
+  Chrome profile 后不再出现，判定为测试驱动器的导航竞态，不是插件行为。
+
+### 其他
+
+- `/validate` 对相对路径返回 `bashPath must be an absolute path`（0.2.4 新校验）。
+- 持久化：profile `cordis.patch.yml` 读回 `bashPath` / `msystem` / `compat` 三项。
+- 单测 90/90；selftest 10/10；compatcheck 8 组通过（含 `tool-pwsh` 替换目标）。
+- 测试 profile `gitbash-audit` 与临时浏览器目录已在验证后清理；桌面 profile 未改动。

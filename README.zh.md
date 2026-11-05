@@ -61,8 +61,9 @@
 - **显式安全**：绝不静默放宽权限——`workspace-write` 下以完全访问运行并在结果里
   标注 `[compat: ...]`，`read-only` 拒绝，`strict` 只允许 `danger-full-access`。
   详见[安全边界](#安全边界先读)。
-- **已验证**：82 个单元/集成用例，加上 DSH `0.2.2-rc.1` 上的 Git 与 MSYS2 真机
-  冒烟（直连、promote、后台、子智能体；真实 Web UI 设置行）。
+- **已验证**：90 个单元/集成用例，加上 DSH `0.2.2-rc.1` 上的 Git 与 MSYS2 真机
+  冒烟（直连、promote、后台、子智能体；0.2.4 审计轮 31/31 场景检查 + 15/15
+  设置页检查，含 strict 实机拒绝）。
 
 ---
 
@@ -116,7 +117,7 @@ set "DSH_CLI=%LOCALAPPDATA%\Programs\DeepSeek Harness\resources\runtime\cli\bin\
 ### 从 npm 安装（已发布）
 
 ```bat
-%DSH_CLI% plugin --profile desktop add @riverzh/dsh-gitbash@0.2.3
+%DSH_CLI% plugin --profile desktop add @riverzh/dsh-gitbash@0.2.4
 ```
 
 最新版可用 `@riverzh/dsh-gitbash@latest`。
@@ -165,7 +166,7 @@ set "DSH_CLI=%LOCALAPPDATA%\Programs\DeepSeek Harness\resources\runtime\cli\bin\
 
 设置页长这样：
 
-![设置页：终端工具](docs/images/settings-row-0.2.2.png)
+![设置页：终端工具](docs/images/settings-row-0.2.4.png)
 
 Shell、兼容模式和 MSYS2 环境下拉都跟随 DSH 的浅色/深色 surface token，闭控件和
 展开列表都保持可读：
@@ -193,7 +194,8 @@ MSYS2 运行时**无法**在 DSH 的 Windows ACL 沙箱里启动：受限令牌�
 - **文件工具仍由 DSH 沙箱保护**；只有 bash 进程不受该沙箱约束。
 - `workspace-write` + `auto` 下，bash 可以写工作区外的文件。除非用户明确要求，
   应把工作区外路径当作只读。
-- 插件不会静默放宽权限：设置页红字、工具描述、system prompt、结果文本四处都写明。
+- 插件不会静默放宽权限：设置页红字、工具描述与 system prompt 都写明；每个未受
+  沙箱约束的结果也带 `[compat: ...]` 尾注。
 - `read-only` 宁可拒绝，也不破坏“只读”承诺。
 - `strict` 给安全敏感用户：只在 `danger-full-access` 下允许 bash。
 - 被策略阻止的调用可以用 `sandbox_permissions` + 一句 `justification` 重试；
@@ -300,7 +302,7 @@ DSH 会请求用户批准；批准只对本次调用生效。`strict` 下 `works
 | Cygwin | `Cygwin`（experimental） | 不设置 | `<root>\bin\bash.exe` |
 
 - **自动**优先 Git for Windows；没有 Git 时选已安装的最佳 MSYS2 环境
-  （`UCRT64` 优先，然后 `MINGW64`、`CLANG64`、`MSYS`）。
+  （`UCRT64` 优先，然后 `MINGW64`、`CLANG64`、`CLANGARM64`、`MINGW32`、`MSYS`）。
 - Git for Windows 只有一个 profile；MSYS2 每个已安装环境一个 profile。所有
   MSYS2 环境共用同一个 `usr\bin\bash.exe`，所以只存 `bashPath` 不够，
   必须同时存 `msystem`。
@@ -377,7 +379,8 @@ WSL 一律排除：`System32\bash.exe`、`Sysnative`、`WindowsApps`、`\\wsl$`�
 ```
 
 - `bashPath: ''` = 自动。
-- `msystem` 为 `auto` 或具体 MSYS2 环境；Git 忽略它并固定 `MINGW64`。
+- `msystem` 为 `auto` 或具体 MSYS2 环境。Git profile 只接受 `auto` / `MINGW64`；
+  其它值会按无效 profile 报错，而不是被静默忽略。
 - `compat` 为 `auto` 或 `strict`。
 - 配置在**新 agent 创建时**读取；**已存在的会话不会热切换**。开始新会话即可
   （子智能体会继承父会话）。
@@ -439,7 +442,7 @@ WSL 一律排除：`System32\bash.exe`、`Sysnative`、`WindowsApps`、`\\wsl$`�
 | 找不到 `job_kill` / `job_output` | 它们是 DSH 的独立工具，不属于 bash；确认 jobs 工具组在 preset 里 |
 | 设置行不显示 | DSH 太旧、插件未加载，或 Web 客户端未重建/刷新；重启并硬刷新 |
 | 找不到 Git/MSYS2 选择，或切换后当前会话没变 | 选择器只在 **设置 → 通用 → 终端工具（Git Bash / MSYS2）**；内置 **终端** 卡片是独立的 UI 终端插件。切换会立即保存，但只对**新会话**生效 |
-| 路径含空格失败 | 填完整路径，不要加引号；表单会原样保存 |
+| 路径含空格 | 填绝对路径即可；成对的单/双引号会被自动剥离 |
 | WSL 的 bash 不出现 | 有意排除；WSL 不符合本插件的 profile/环境模型 |
 | 输出像被截断 | 长输出只保留尾部；用结果里给的 spill 路径看完整文件 |
 
@@ -467,6 +470,9 @@ WSL 一律排除：`System32\bash.exe`、`Sysnative`、`WindowsApps`、`\\wsl$`�
 - 最低 DSH **0.2.2**。插件只使用官方服务的结构性投影（`ctx.subprocess`、
   `ctx.jobs`、`ctx.sandboxPolicy`、`ctx.shellEnv`、`ctx.workingDirectory`、
   `ctx.approval`、`ctx.configForms` 等），不 import 私有 DSH 包。
+- 替换需要 `ctx.subprocess.spawn` **和** `ctx.sandboxPolicy.resolve`：bash 在
+  DSH 沙箱之外启动，会话模式只能由 policy 服务给出。任一缺失时插件保留 preset
+  的 `pwsh`，并在设置行显示缺失的能力。
 - 关键集成点：`agent/created`、`tools.restrict`、`tool:bash` / `tool:pwsh` 的
   section 名、结果标记、`meta.cwd`。事件名写错是静默 no-op，所以测试会断言这些
   裸字符串。
@@ -480,8 +486,9 @@ WSL 一律排除：`System32\bash.exe`、`Sysnative`、`WindowsApps`、`\\wsl$`�
   `cordis.patch.yml` 再在 `process.platform !== 'win32'` 时禁用 entry。
 
 **2026-11-06 真机验证**：DSH `0.2.2-rc.1`、Git for Windows 2.56、MSYS2
-5.3.20（UCRT64）；直接 bash、promote、后台任务、子智能体与真实设置行
-（通过 UI 切到 MSYS2）均已跑过。原始事件见 [docs/SMOKE.md](docs/SMOKE.md)。
+5.3.20（UCRT64）；直接 bash、promote、后台任务、子智能体、SIGTERM 归一化、
+相对 workdir、strict 拒绝与真实设置行（通过 UI 切到 MSYS2）均已跑过——干净加载
+下 31/31 场景检查 + 15/15 UI 检查。原始事件见 [docs/SMOKE.md](docs/SMOKE.md)。
 
 ---
 
@@ -491,13 +498,14 @@ WSL 一律排除：`System32\bash.exe`、`Sysnative`、`WindowsApps`、`\\wsl$`�
 pnpm install
 pnpm build        # lib/index.js + lib/client.js
 pnpm check        # tsc --noEmit
-pnpm test         # node:test；82 个用例，含真实 Git/MSYS2（存在时）
+pnpm test         # node:test；90 个用例，含真实 Git/MSYS2（存在时）
 pnpm selftest     # 纯逻辑自测，不需要 DSH
 pnpm compatcheck  # 对已安装 DSH 做契约字符串核对
 ```
 
 真实集成测试会自动发现本机 Git/MSYS2；没有时跳过。覆盖 `MSYSTEM`、PATH 隔离、
-退出码、stderr、真实子 bash、超时，以及 compat 下“工作区外可写”的预期行为。
+退出码、stderr、真实子 bash、超时、真实 `SIGTERM`/`SIGKILL` 编码、可选的 MSYS2
+工具链，以及 compat 下“工作区外可写”的预期行为。
 
 ### 目录
 

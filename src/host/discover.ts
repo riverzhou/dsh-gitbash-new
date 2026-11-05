@@ -13,6 +13,7 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, statSync } from 'node:fs'
 import { basename, dirname, join, normalize } from 'node:path'
 import type { BashFlavor, BashProfileView, Msystem, MsystemSetting } from '../shared/protocol.ts'
+import { FLAVOR_LABELS, MSYSTEMS, stripMatchingQuotes } from '../shared/protocol.ts'
 import type { TerminalToolSettings } from './types.ts'
 
 /** A validated shell profile, with its install/environment facts. */
@@ -37,15 +38,11 @@ export interface ResolveProfileResult {
   readonly problem?: string
 }
 
-/** MSYS2 environments, in preference order. */
-const MSYS2_ENVIRONMENTS: readonly { readonly msystem: Msystem; readonly dir: string }[] = [
-  { msystem: 'UCRT64', dir: 'ucrt64' },
-  { msystem: 'MINGW64', dir: 'mingw64' },
-  { msystem: 'CLANG64', dir: 'clang64' },
-  { msystem: 'CLANGARM64', dir: 'clangarm64' },
-  { msystem: 'MINGW32', dir: 'mingw32' },
-  { msystem: 'MSYS', dir: '' },
-]
+/** MSYS2 environments, in preference order; `dir` is the install subdirectory. */
+const MSYS2_ENVIRONMENTS: readonly { readonly msystem: Msystem; readonly dir: string }[] = MSYSTEMS.map(msystem => ({
+  msystem,
+  dir: msystem === 'MSYS' ? '' : msystem.toLowerCase(),
+}))
 
 /** Normalize a path for identity comparisons (Windows semantics). */
 export function normalizePathKey(path: string): string {
@@ -56,16 +53,6 @@ export function normalizePathKey(path: string): string {
 export function isBashFilename(path: string): boolean {
   const name = basename(path).toLowerCase()
   return name === 'bash' || name === 'bash.exe'
-}
-
-/** Strip one matching pair of single/double quotes around a user/YAML value. */
-function stripMatchingQuotes(value: string): string {
-  const trimmed = value.trim()
-  if (trimmed.length < 2) return trimmed
-  const first = trimmed[0]
-  const last = trimmed[trimmed.length - 1]
-  if ((first === '"' && last === '"') || (first === "'" && last === "'")) return trimmed.slice(1, -1).trim()
-  return trimmed
 }
 
 /**
@@ -80,6 +67,11 @@ export function isBlockedBash(path: string): boolean {
   if (key.includes('\\windowsapps\\')) return true
   if (key.endsWith('\\wsl.exe')) return true
   return false
+}
+
+/** True for a Windows drive or UNC absolute path (host-platform independent). */
+function isWindowsAbsolutePath(path: string): boolean {
+  return /^[a-zA-Z]:[\\/]/.test(path) || path.startsWith('\\\\')
 }
 
 /** True when `path` is an existing regular file. */
@@ -225,11 +217,9 @@ function makeProfile(
   probe: boolean,
 ): BashProfile {
   const id = `${flavor}|${normalizePathKey(root)}|${msystem ?? ''}`
-  const label = flavor === 'git'
-    ? 'Git for Windows'
-    : flavor === 'msys2'
-      ? `MSYS2 ${msystem ?? 'MSYS'}`
-      : 'Cygwin'
+  const label = flavor === 'msys2'
+    ? `${FLAVOR_LABELS.msys2} ${msystem ?? 'MSYS'}`
+    : FLAVOR_LABELS[flavor]
   let problem: string | undefined
   if (isBlockedBash(path)) problem = 'WSL bash is not supported'
   else if (!isBashFilename(path)) problem = 'not a bash executable'
@@ -309,6 +299,7 @@ export function profileFromPath(
   if (trimmed.length === 0) return { problem: 'bashPath is empty' }
   if (isBlockedBash(trimmed)) return { problem: 'WSL bash is not supported' }
   if (!isBashFilename(trimmed)) return { problem: 'path must point to bash.exe' }
+  if (!isWindowsAbsolutePath(trimmed)) return { problem: `bashPath must be an absolute path: ${trimmed}` }
   if (!isFile(trimmed)) return { problem: `bash.exe does not exist: ${trimmed}` }
   const root = deriveRootFromBash(trimmed)
   if (root === undefined) {
@@ -533,12 +524,4 @@ export function resolveEffectiveProfile(
     return { problem: discovered.notes[0] ?? 'no usable Git Bash / MSYS2 installation found' }
   }
   return { profile: discovered.recommended }
-}
-
-/** Human label with the version and MSYS2 environment. */
-export function profileLabel(profile: BashProfile): string {
-  const version = profile.version !== undefined ? ` ${profile.version}` : ''
-  if (profile.flavor === 'git') return `Git for Windows${version}`
-  if (profile.flavor === 'msys2') return `MSYS2 ${profile.msystem ?? 'MSYS'}${version}`
-  return `Cygwin${version}`
 }

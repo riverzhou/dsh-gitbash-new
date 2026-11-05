@@ -30,14 +30,20 @@ function readService<T>(ctx: HostContextLike, name: string): T | undefined {
 export function probeDeploymentCapability(ctx: HostContextLike): CapabilityView {
   const shell = readService<ShellServiceLike>(ctx, 'shell')
   const jobs = readService<{ start?: unknown }>(ctx, 'jobs')
-  const supported = process.platform === 'win32' && readService(ctx, 'subprocess') !== undefined
+  const subprocess = readService<{ spawn?: unknown }>(ctx, 'subprocess')
+  const sandboxPolicy = readService<{ resolve?: unknown }>(ctx, 'sandboxPolicy')
+  const supported = process.platform === 'win32'
+    && subprocess !== undefined && typeof subprocess.spawn === 'function'
+    && sandboxPolicy !== undefined && typeof sandboxPolicy.resolve === 'function'
   return {
     supported,
     ...(!supported
       ? {
           reason: process.platform !== 'win32'
             ? 'bash replacement is Windows-only'
-            : 'this DSH composition is missing ctx.subprocess',
+            : subprocess === undefined || typeof subprocess.spawn !== 'function'
+              ? 'this DSH composition is missing ctx.subprocess'
+              : 'this DSH composition is missing ctx.sandboxPolicy',
         }
       : {}),
     ...shell?.sandboxMode !== undefined ? { shellSandboxMode: shell.sandboxMode } : {},

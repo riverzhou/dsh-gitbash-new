@@ -105,6 +105,7 @@ test('profileFromPath rejects flavor/environment mismatches', t => {
   const gitPath = join(git, 'bin', 'bash.exe')
   assert.equal(profileFromPath(gitPath, 'auto').profile?.msystem, 'MINGW64')
   assert.ok(profileFromPath(gitPath, 'UCRT64').problem?.includes('MINGW64'))
+  assert.ok(profileFromPath('Git\\bin\\bash.exe', 'auto').problem?.includes('absolute'))
 
   touch(join(msys, 'msys2.exe'))
   touch(join(msys, 'usr', 'bin', 'bash.exe'))

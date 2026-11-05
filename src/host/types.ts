@@ -12,7 +12,7 @@
  * declarations only.
  */
 
-import type { BashFlavor, CompatMode, MsystemSetting } from '../shared/protocol.ts'
+import type { CompatMode, MsystemSetting } from '../shared/protocol.ts'
 
 /** A schemastery volatile field as the Loader hands it to `apply`. */
 export interface VolatileLike<T> {
@@ -339,11 +339,4 @@ export interface ToolDefinitionLike {
   execute(args: Record<string, unknown>, exec: ToolExecutionLike): Promise<unknown>
   presentCall?(args: unknown): ToolCallViewLike
   presentResult?(args: unknown, result: ToolResultLike): ToolResultViewLike | undefined
-}
-
-/** Flavor labels used by diagnostics. */
-export const FLAVOR_LABELS: Record<BashFlavor, string> = {
-  git: 'Git for Windows',
-  msys2: 'MSYS2',
-  cygwin: 'Cygwin',
 }

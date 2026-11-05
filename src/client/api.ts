@@ -9,13 +9,27 @@ async function post<T>(path: string, body: unknown): Promise<T> {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
   })
-  const payload: unknown = await response.json()
-  if (typeof payload !== 'object' || payload === null) {
+  const text = await response.text()
+  let payload: unknown
+  try {
+    payload = text.length === 0 ? undefined : JSON.parse(text)
+  } catch {
+    // The auth fence and carrier errors are plain text, not JSON. Surface the
+    // status and a bounded body instead of a JSON.parse SyntaxError.
+    throw new Error(`request failed: ${path} (${response.status}): ${text.slice(0, 200) || 'empty response'}`)
+  }
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
     throw new Error(`unexpected response from ${path}`)
   }
   const record = payload as { ok?: unknown; error?: unknown }
+  if (!response.ok) {
+    throw new Error(
+      typeof record.error === 'string'
+        ? record.error
+        : `request failed: ${path} (${response.status})`,
+    )
+  }
   if (record.ok === false) throw new Error(typeof record.error === 'string' ? record.error : `request failed: ${path}`)
-  if (!response.ok) throw new Error(`request failed: ${path} (${response.status})`)
   return payload as T
 }
 

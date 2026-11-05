@@ -128,6 +128,7 @@ src/
   - `agent.ctx.get('tools')` 的 `register` / `restrict` 是函数
   - `agent.ctx.get('systemPrompt')` 的 `section` 是函数
   - host `ctx.get('subprocess')?.spawn` 是函数
+  - host `ctx.get('sandboxPolicy')?.resolve` 是函数（缺它则 bash 无法判定会话模式，宁可保留 pwsh 也不注册一个必然失败的 bash）
 - 动作顺序（失败全部回滚）：
   1. `tools.restrict({ deny: ['pwsh'] })`（抛错 = 该 agent 已无 pwsh，跳过）
   2. `tools.register(bashTool)`
@@ -142,10 +143,10 @@ src/
 |---|---|---|
 | `description` | string, required | 5–10 词主动语态描述（UI 展示） |
 | `command` | string, required | bash 命令（`bash -c`） |
-| `timeoutMs` | number | 执行器默认 120000、上限 600000；`promoteOnTimeout` 时超时转后台 |
+| `timeoutMs` | number | 执行器默认 120000、上限 600000；job 注册表可用时超时转后台 |
 | `workdir` | string | 绝对或相对会话 cwd；相对路径按会话 cwd 解析 |
 | `run_in_background` | boolean | 仅在 jobs 可用时出现；无超时 |
-| `sandbox_permissions` | enum `workspace-write`/`danger-full-access` | 仅在 `ctx.shell.sandboxMode` 存在时出现 |
+| `sandbox_permissions` | enum `workspace-write`/`danger-full-access` | 仅在 `ctx.shell.sandboxMode` 与 `ctx.sandboxPolicy` 都存在时出现 |
 | `justification` | string | 与 `sandbox_permissions` 成对，非空一句 |
 
 参数根是开放的（未知键被忽略）；执行只读命名字段。
@@ -202,13 +203,13 @@ type BashValue =
 - `kind: 'bash'`（官方 `JobKindMap` 已有）；`label` = 原始 command；`owner` = `agent.id`；`toolCall: { callId, rootCallId }`；`output` = 懒读取的 stdout/stderr 两个 source。
 - 前台在有 jobs 时也注册为 job（可在运行中被 kill）；在 wait 内 settle → `remove`，模型看不到 id。
 - wait 超时且进程已启动 → `promoted`：做**一次** consuming `read` 作为已产生输出，job 继续跑。
-- wait 超时但进程还没启动 → 合成 `foreground`：`timedOut:true, exitCode:null`，文本 `(no output)\n[timed out after <t>ms]\n[exit code: null]`。
-- `promoteOnTimeout` 需要 `enableRunInBackground && registry && admission 成功`；admission 失败 → warn + 退回 deadline kill。
+- wait 超时但进程还没启动 → 合成 `foreground`：`timedOut:true, exitCode:null`，文本 `(no output)\n[timed out after <t>ms]\n[exit status unavailable]`。
+- 前台走 job/promote 需要 registry 的 `start/wait/read/kill/remove` 齐全且 admission 成功；admission 失败 → warn + 退回 deadline kill。
 - 后台取消：`AbortController` → `terminate()`；`done` 不 reject，异常映射为 `failed`。
 
 ### 4.6 沙箱模式解析
 
-- `effective = ctx.sandboxPolicy.resolve({ session }).mode`；无该服务 → `danger-full-access`。
+- `effective = ctx.sandboxPolicy.resolve({ session }).mode`；服务缺失或结果不是已知三模式 → **拒绝执行**（fail-closed），不会默认 `danger-full-access`。替换阶段也要求该服务存在，否则保留 pwsh。
 - `sandbox_permissions` + `justification`：走官方提权语义（严格更宽、`ctx.approval.request`、固定文案）。批准后的 mode 只作用于本次调用。
 - 本插件**不调用** `ctx.sandbox.confine`：MSYS2 在官方 ACL 令牌下无法启动。bash 以当前用户 Medium 令牌直接 spawn。
 - 结果 `sandbox`：
@@ -293,7 +294,7 @@ interface BashProfile {
 ### 5.7 选择与持久化
 
 - Config：`bashPath`（空 = auto）+ `msystem`（`auto` 或具体值）。
-- `auto` 的推导：Git → `MINGW64`；MSYS2 → 按存在的环境根优先 `UCRT64 > MINGW64 > CLANG64 > MSYS`；Cygwin → 空。
+- `auto` 的推导：Git → `MINGW64`；MSYS2 → 按存在的环境根优先 `UCRT64 > MINGW64 > CLANG64 > CLANGARM64 > MINGW32 > MSYS`；Cygwin → 空。
 - “自动发现”的默认选中：Git for Windows 优先；没有 Git 再选 MSYS2 的最佳环境。用户可显式选 MSYS2。
 - UI 选择某个 profile 时，同时写入 `bashPath` 与 `msystem`；手填路径时自动识别 flavor，MSYS2 多环境则由 `msystem` 下拉决定。
 - 配置了 MSYS2 的 `msystem` 但该环境根不存在 → 无效，设置页红字，替换跳过。
@@ -306,8 +307,8 @@ interface BashProfile {
 
 | 字段 | 类型 | 默认 | 说明 |
 |---|---|---|---|
-| `bashPath` | string, volatile | `''` | 空 = 自动发现；非空必须通过校验 |
-| `msystem` | `'auto' \| 'MINGW64' \| 'UCRT64' \| 'CLANG64' \| 'CLANGARM64' \| 'MINGW32' \| 'MSYS'`, volatile | `'auto'` | 仅 MSYS2 需要；Git 忽略并强制 MINGW64 |
+| `bashPath` | string, volatile | `''` | 空 = 自动发现；非空必须是绝对 Windows 路径并通过校验 |
+| `msystem` | `'auto' \| 'MINGW64' \| 'UCRT64' \| 'CLANG64' \| 'CLANGARM64' \| 'MINGW32' \| 'MSYS'`, volatile | `'auto'` | MSYS2 需要；Git 只接受 `auto`/`MINGW64`，其它值拒绝而不是忽略 |
 | `compat` | `'auto' \| 'strict'`, volatile | `'auto'` | auto：workspace-write 以完全访问跑；strict：只允许 danger-full-access |
 
 - 只有 `.volatile()` 字段进设置表单；值由 profile `cordis.patch.yml` 持久化。
@@ -339,7 +340,7 @@ interface BashProfile {
 - 路径 + `msystem` 通过一次 `configForms.mutate` 原子写入，避免中间态。
 - 真机 UI 已验证：Shell 下拉切 Git → `/state` 读回 `git|...|MINGW64`；切回 MSYS2
   UCRT64 读回一致；0.2.2 上再验一次 UI 写入。截图见
-  `docs/images/settings-row-0.2.2.png`。
+  `docs/images/settings-row-0.2.4.png`。
 - 结果文本使用短标记 `[compat: bash runs outside the DSH file sandbox (session mode …)]`；
   工具描述明确它是**部署提示，不是命令 stderr**。
 
@@ -376,29 +377,31 @@ interface BashProfile {
 - **单元**（`node:test`，无 DSH）：
   - 发现：Git/MSYS2 flavor 识别、MSYS2 环境枚举（UCRT64/MINGW64/…）、WSL 排除、去重、版本解析。
   - 路径：POSIX↔Windows、`/tmp`、相对路径、非法绝对 POSIX。
-  - 环境：Git 的 `MSYSTEM=MINGW64`、MSYS2 的 `MSYSTEM=<env>` 与三段 PATH、`msystem`/flavor 不匹配拒绝。
+  - 环境：Git 的 `MSYSTEM=MINGW64`、MSYS2 的 `MSYSTEM=<env>` 与三段 PATH、`msystem`/flavor 不匹配拒绝、Cygwin 的 `MSYSTEM`/`MSYS2_PATH_TYPE` tombstone。
   - 渲染：stdout/stderr 合并、截断、退出码/信号/超时/停止/兼容标记、parseExitStatus。
-  - 提权：参数配对、严格更宽、approval outcome 映射、8 语言 `displayReason`（en/zh/ja/es/fr/de/ru/pt）。
-  - 设置：默认值、volatile 读取、无效路径。
-  - 工具定义：参数/输出 schema 形状、presenter 返回值、promote 文本（无交接句）。
+  - 提权：参数配对、严格更宽、approval outcome 映射、8 语言 `displayReason`（en/zh/ja/es/fr/de/ru/pt）、read-only 下批准 `danger-full-access`。
+  - 设置：默认值、volatile 读取、无效路径、相对 `bashPath` 拒绝。
+  - 工具定义：参数/输出 schema 形状、presenter 返回值、promote 文本（无交接句）、前台 job settle 后移除。
+  - 替换：缺 `subprocess`/`sandboxPolicy` 时保留 pwsh；能力探测返回缺失原因。
   - 打包：`dsh.bundle.platforms`、`engines.dsh`/`engines.node` 下限、patch 平台闸。
 - **集成**（无 DSH 进程）：用真实 bash 跑 `executor`，**Git 与 MSYS2 各跑一遍**：
-  - `echo`、`pwd`、`exit 3`、stderr、超时、abort、后台 job 的 output/read/kill。
+  - `echo`、`pwd`、`exit 3`、stderr、超时、真实 `SIGTERM` / `SIGKILL` 编码、工作区外写入（compat 预期）。
   - **MSYS2 profile**：`echo $MSYSTEM` 必须等于所选环境；`command -v gcc` 命中该环境（若装了 gcc）。
   - **Git profile**：`echo $MSYSTEM` 必须为 `MINGW64`。
-  - **绝对路径写工作区外成功**（compat 预期）——这是回归测试，提醒我们不能声称沙箱。
   - 启动失败检测（模拟 stderr `*** fatal error - `）。
+  - 后台 job 的 `output/read/kill` 由 fake registry 单测覆盖（`tests/tool.test.mjs`）。
 - **真机冒烟**（新 DSH 会话）：按 AGENTS §1 的 ①~⑥ 逐条；记录命令与结果。
   2026-10-18 在 DSH 0.2.1-rc.2、2026-11-06 在 DSH 0.2.2-rc.1 上跑通：插件加载、
   `/api` state、`agent/created` 替换、模型工具目录只有 `bash`、真实 bash 调用、
-  promote / 后台 / 子智能体与设置行。详见 [SMOKE.md](SMOKE.md)。
+  promote / 后台 / 子智能体与设置行；0.2.4 审计轮 31/31 场景 + 15/15 UI 检查。
+  详见 [SMOKE.md](SMOKE.md)。
 - 不使用 `lib/` 旧构建做验证（checkout 里可能 stale）；以 `src` + 部署运行时为准。
 
 ---
 
 ## 9. 打包与安装
 
-- npm 包名：`@riverzh/dsh-gitbash`（DSH entry id 仍是 `dsh-gitbash`）；`0.1.0` 是内部实现基线，`0.2.0` 是首个公开发布版本，`0.2.1` 为审计修复版，`0.2.2` 修复 Windows 信号/`PWD` 与设置页浅深色，`0.2.3` 同步 DSH 0.2.2 契约；License 为 `GPL-3.0-only`。
+- npm 包名：`@riverzh/dsh-gitbash`（DSH entry id 仍是 `dsh-gitbash`）；`0.1.0` 是内部实现基线，`0.2.0` 是首个公开发布版本，`0.2.1` 为审计修复版，`0.2.2` 修复 Windows 信号/`PWD` 与设置页浅深色，`0.2.3` 同步 DSH 0.2.2 契约，`0.2.4` 为 0.2.3 的审计修复版；License 为 `GPL-3.0-only`。
 - `package.json`：
   - `"type":"module"`，`main: "lib/index.js"`，`exports: { ".": ..., "./client": ... }`。
   - `"dsh": { "bundle": { "platforms": ["win32"], "patch": "./cordis.patch.yml" }, "client": { "platform": "web" } }`。
@@ -482,8 +485,24 @@ interface BashProfile {
 | 子智能体 | ✅ child `5d5dc315-…` 内 `bash` 可用；`SUB022_OK`；`send_message` 回父会话 |
 | 设置行（真实 Chromium） | ✅ 标题、Git/MSYS2 选择、兼容、红字、高级诊断、`当前版本：0.2.2-rc.1` 全部渲染 |
 | 设置写入 | ✅ UI 切到 MSYS2 UCRT64 → `/state` 读回 `bashPath=C:\msys64\usr\bin\bash.exe`、`msystem=UCRT64`；新会话 `MSYSTEM=UCRT64` |
-| 兼容告警 | ✅ workspace-write 会话每结果带 `[compat: ...]`；read-only/strict 仍由单元测试覆盖（未在 0.2.2 UI 上重点） |
-| compatcheck | ✅ 运行时 `0.2.2-rc.1`（floor `0.2.2-0`），7 组 Host/Client 契约 token 全过 |
+| 兼容告警 | ✅ workspace-write 会话每结果带 `[compat: ...]`；strict 拒绝已在 0.2.4 审计轮实测（见 §12.3） |
+| compatcheck | ✅ 运行时 `0.2.2-rc.1`（floor `0.2.2-0`），8 组 Host/Client 契约 token 全过 |
 
-未覆盖：0.2.2 上重跑“受限令牌启动 MSYS2”（见 §2.1 源码级复核）、read-only/strict 的
-实机点击、浅色主题截图（0.2.1 已有，0.2.2 设置行渲染路径未变）。
+未覆盖：0.2.2 上重跑“受限令牌启动 MSYS2”（见 §2.1 源码级复核）、read-only 的实机点击、
+浅色主题截图（0.2.1 已有，0.2.2 设置行渲染路径未变）。
+
+### 12.3 2026-11-06，0.2.4 审计回归（DSH `0.2.2-rc.1`）
+
+独立 profile `gitbash-audit`（web 模板 + `link:` 当前仓库，端口 `56124`）：
+
+| 项 | 结果 |
+|---|---|
+| API/场景检查 | ✅ 31/31：state/discover（7/7 探测到版本）/validate；Git 直连、promote 新文本、后台 + `job_output`、`SIGTERM` 归一化、相对 `workdir`、子智能体（child 只有 bash、无 pwsh、执行成功） |
+| 设置行 UI（真实 Chromium，干净加载） | ✅ 15/15：三组下拉、MSYS2 UCRT64 切换并读回、strict 写入/回退、高级诊断、无 console 错误、无失败请求 |
+| strict 拒绝 | ✅ 新会话在 strict + workspace-write 下返回 `bash cannot run under the Windows file sandbox…`，未执行 `SHOULD_NOT_RUN` |
+| 设置持久化 | ✅ profile `cordis.patch.yml` 读回 `bashPath: C:\msys64\usr\bin\bash.exe` / `msystem: UCRT64` / `compat: auto` |
+| 绝对路径校验 | ✅ `/validate` 对相对路径返回 `bashPath must be an absolute path` |
+| 单测 / compatcheck | ✅ 90/90、selftest 10/10、compatcheck 8 组全过 |
+
+未覆盖：read-only 的实机点击与提权审批弹窗（单测覆盖）、受限令牌启动 MSYS2 的
+0.2.2 重跑。

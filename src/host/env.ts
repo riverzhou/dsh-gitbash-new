@@ -8,6 +8,7 @@
 import { existsSync, statSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { normalize, resolve, sep } from 'node:path'
+import { stripMatchingQuotes } from '../shared/protocol.ts'
 import type { BashProfile } from './discover.ts'
 
 /** A workdir the caller asked for cannot be represented as a Windows cwd. */
@@ -56,16 +57,6 @@ function join(base: string, ...parts: string[]): string {
 /** Normalize a PATH entry for comparison. */
 function pathKey(path: string): string {
   return normalize(path).replaceAll('/', '\\').toLowerCase()
-}
-
-/** Strip one matching pair of single/double quotes from a PATH entry. */
-function stripMatchingQuotes(value: string): string {
-  const trimmed = value.trim()
-  if (trimmed.length < 2) return trimmed
-  const first = trimmed[0]
-  const last = trimmed[trimmed.length - 1]
-  if ((first === '"' && last === '"') || (first === "'" && last === "'")) return trimmed.slice(1, -1).trim()
-  return trimmed
 }
 
 /** True when `entry` is `root` or below it. */
@@ -132,8 +123,16 @@ export function composeEnv(
   // trusts an inherited `PWD` when it matches the cwd and then reports that
   // Windows form as `$PWD`/`pwd`, breaking POSIX path expectations. Explicit
   // `undefined` tombstones make the subprocess service drop the ambient values
-  // so the shell derives the POSIX path from its real cwd.
-  const env: NodeJS.ProcessEnv = { ...ENV_OVERRIDES, PWD: undefined, OLDPWD: undefined }
+  // so the shell derives the POSIX path from its real cwd. The same tombstone
+  // keeps an inherited `MSYSTEM`/`MSYS2_PATH_TYPE` out of a Cygwin (or a
+  // mismatched) session; each flavor that needs them sets its own.
+  const env: NodeJS.ProcessEnv = {
+    ...ENV_OVERRIDES,
+    PWD: undefined,
+    OLDPWD: undefined,
+    MSYSTEM: undefined,
+    MSYS2_PATH_TYPE: undefined,
+  }
   if (profile.flavor === 'git') {
     env.MSYSTEM = 'MINGW64'
   } else if (profile.flavor === 'msys2') {

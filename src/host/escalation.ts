@@ -127,18 +127,6 @@ export async function approveEscalation(
   }
 }
 
-/** Read the approval service from the host context, if present. */
-export function approvalOf(get: (name: string) => unknown): ApprovalServiceLike | undefined {
-  try {
-    const value = get('approval')
-    return value !== undefined && value !== null && typeof (value as ApprovalServiceLike).request === 'function'
-      ? value as ApprovalServiceLike
-      : undefined
-  } catch {
-    return undefined
-  }
-}
-
 /** Build the approval ingredients for one tool execution. */
 export function approvalFor(exec: ToolExecutionLike, approver: ApprovalServiceLike | undefined): EscalationApproval {
   return {

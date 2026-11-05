@@ -131,3 +131,25 @@ test('a Cygwin profile keeps its own bin and filters foreign roots', () => {
   assert.equal(parts.includes('C:\\Windows'), true)
   assert.equal(path.toLowerCase().includes('msys64'), false)
 })
+
+test('a Cygwin profile removes inherited MSYSTEM/MSYS2_PATH_TYPE', () => {
+  const root = String.raw`C:\cygwin`
+  const cygwin = profile({
+    id: 'cyg',
+    flavor: 'cygwin',
+    root,
+    path: `${root}\\bin\\bash.exe`,
+    msystem: undefined,
+    label: 'Cygwin',
+  })
+  const env = composeEnv(cygwin, {
+    PATH: 'C:\\Windows',
+    MSYSTEM: 'MINGW64',
+    MSYS2_PATH_TYPE: 'inherit',
+  })
+  // Tombstones, like PWD/OLDPWD: the subprocess service drops the ambient value.
+  assert.equal(Object.hasOwn(env, 'MSYSTEM'), true)
+  assert.equal(Object.hasOwn(env, 'MSYS2_PATH_TYPE'), true)
+  assert.equal(env.MSYSTEM, undefined)
+  assert.equal(env.MSYS2_PATH_TYPE, undefined)
+})

@@ -3,6 +3,7 @@
  * persistence) plus the host's read-only `/api` status.
  */
 import { fetchDiscover, fetchState, fetchValidate } from './api.ts'
+import { stripMatchingQuotes } from '../shared/protocol.ts'
 import type { SettingsScopeLike, Translate } from './types.ts'
 import type { BashProfileView, CapabilityView, CompatMode, MsystemSetting, ReplaceView, StateView } from '../shared/protocol.ts'
 
@@ -78,21 +79,11 @@ function shallowEqual(a: object, b: object): boolean {
   return true
 }
 
-/** Normalize a path shown in the form (strip one matching quote pair). */
-function normalizeConfigPath(value: string): string {
-  const trimmed = value.trim()
-  if (trimmed.length < 2) return trimmed
-  const first = trimmed[0]
-  const last = trimmed[trimmed.length - 1]
-  if ((first === '"' && last === '"') || (first === "'" && last === "'")) return trimmed.slice(1, -1).trim()
-  return trimmed
-}
-
 /** Normalize a form value into the config the row uses. */
 function configOf(value: unknown): RowConfig {
   const record = typeof value === 'object' && value !== null ? value as Record<string, unknown> : {}
   return {
-    bashPath: typeof record.bashPath === 'string' ? normalizeConfigPath(record.bashPath) : '',
+    bashPath: typeof record.bashPath === 'string' ? stripMatchingQuotes(record.bashPath) : '',
     msystem: typeof record.msystem === 'string' ? record.msystem as MsystemSetting : 'auto',
     compat: typeof record.compat === 'string' ? record.compat as CompatMode : 'auto',
   }

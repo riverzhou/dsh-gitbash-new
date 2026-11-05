@@ -94,27 +94,38 @@ function buildToolRuntime(
   profile: BashProfile,
   settings: TerminalToolSettings,
   foreignRoots: readonly string[],
-): BashToolRuntime | undefined {
+): { runtime: BashToolRuntime } | { reason: string } {
   const subprocess = readService<SubprocessServiceLike>(host, 'subprocess')
-  if (subprocess === undefined || typeof subprocess.spawn !== 'function') return undefined
-  const jobs = readService<JobRegistryLike>(host, 'jobs')
+  if (subprocess === undefined || typeof subprocess.spawn !== 'function') {
+    return { reason: 'ctx.subprocess.spawn is not available' }
+  }
+  // The tool resolves the session mode through `ctx.sandboxPolicy` itself: bash
+  // is spawned unconfined, so that service is the only source of the standing
+  // mode. Without it every call would have to fail closed, which is a worse
+  // outcome than leaving the preset's `pwsh` in place.
   const sandboxPolicy = readService<SandboxPolicyServiceLike>(host, 'sandboxPolicy')
+  if (sandboxPolicy === undefined || typeof sandboxPolicy.resolve !== 'function') {
+    return { reason: 'ctx.sandboxPolicy.resolve is not available' }
+  }
+  const jobs = readService<JobRegistryLike>(host, 'jobs')
   const shell = readService<ShellServiceLike>(host, 'shell')
   const shellEnv = readService<ShellEnvServiceLike>(host, 'shellEnv')
   const workingDirectory = readService<WorkingDirectoryServiceLike>(host, 'workingDirectory')
   const approval = readService<ApprovalServiceLike>(host, 'approval')
   return {
-    subprocess,
-    profile,
-    compat: settings.compat,
-    ...jobs !== undefined && typeof jobs.start === 'function' ? { jobs } : {},
-    ...sandboxPolicy !== undefined && typeof sandboxPolicy.resolve === 'function' ? { sandboxPolicy } : {},
-    ...shell !== undefined ? { shell } : {},
-    ...shellEnv !== undefined && typeof shellEnv.collect === 'function' ? { shellEnv } : {},
-    ...workingDirectory !== undefined && typeof workingDirectory.ensure === 'function' ? { workingDirectory } : {},
-    ...approval !== undefined && typeof approval.request === 'function' ? { approval } : {},
-    foreignRoots,
-    warn: (message: string) => diag(`tool: ${message}`),
+    runtime: {
+      subprocess,
+      profile,
+      compat: settings.compat,
+      ...jobs !== undefined && typeof jobs.start === 'function' ? { jobs } : {},
+      sandboxPolicy,
+      ...shell !== undefined ? { shell } : {},
+      ...shellEnv !== undefined && typeof shellEnv.collect === 'function' ? { shellEnv } : {},
+      ...workingDirectory !== undefined && typeof workingDirectory.ensure === 'function' ? { workingDirectory } : {},
+      ...approval !== undefined && typeof approval.request === 'function' ? { approval } : {},
+      foreignRoots,
+      warn: (message: string) => diag(`tool: ${message}`),
+    },
   }
 }
 
@@ -133,8 +144,9 @@ export function replaceTerminalTool(
   const capability = probeCapability(agentCtx)
   if (capability.tools === undefined) return { applied: false, reason: 'ctx.tools.register/restrict is not available' }
   if (capability.systemPrompt === undefined) return { applied: false, reason: 'ctx.systemPrompt.section is not available' }
-  const runtime = buildToolRuntime(host, profile, settings, foreignRoots)
-  if (runtime === undefined) return { applied: false, reason: 'ctx.subprocess.spawn is not available' }
+  const built = buildToolRuntime(host, profile, settings, foreignRoots)
+  if ('reason' in built) return { applied: false, reason: built.reason }
+  const runtime = built.runtime
 
   let releaseRestriction: (() => void) | undefined
   try {
@@ -152,7 +164,7 @@ export function replaceTerminalTool(
     releases.push(capability.systemPrompt.section({ name: 'tool:pwsh', order: orderPwsh, text: '' }))
     releases.push(capability.systemPrompt.section({ name: 'tool:bash', order: orderBash, text: TOOL_BASH_TEXT }))
     const windowsText = settings.compat === 'auto'
-      ? 'Git Bash on Windows runs outside the DSH file sandbox when the session mode is workspace-write, because the MSYS2 runtime cannot start under the Windows restricted token. Do not write outside the workspace; treat outside paths as read-only unless the user explicitly asks otherwise.'
+      ? 'bash on Windows runs outside the DSH file sandbox when the session mode is workspace-write, because the MSYS2 runtime cannot start under the Windows restricted token. Do not write outside the workspace; treat outside paths as read-only unless the user explicitly asks otherwise.'
       : 'Bash is available only under danger-full-access in this deployment; under read-only/workspace-write the bash tool refuses instead of widening permissions.'
     releases.push(capability.systemPrompt.section({
       name: 'tool:bash:windows',

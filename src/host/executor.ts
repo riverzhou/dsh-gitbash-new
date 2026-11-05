@@ -297,6 +297,6 @@ function collect(reader: SubprocessOutputReaderLike): CollectedOutputLike {
 /** Build a concise, actionable spawn error. */
 function spawnMessage(profile: BashProfile, error: unknown): string {
   const detail = error instanceof Error ? error.message : String(error)
-  return `Git Bash could not start (${profile.label} at ${profile.path}): ${detail}. `
+  return `bash could not start (${profile.label} at ${profile.path}): ${detail}. `
     + 'Re-run "auto discover" in Settings → General → Terminal tool, or fix the path.'
 }

@@ -17,14 +17,13 @@ import {
 } from 'react'
 import { createRowController, type RowConfig } from './store.ts'
 import type { SettingsScopeLike, Translate } from './types.ts'
+import { MSYSTEM_SETTINGS } from '../shared/protocol.ts'
 import type { BashProfileView, MsystemSetting } from '../shared/protocol.ts'
 
 export interface TerminalToolRowProps {
   readonly t: Translate
   readonly scope?: SettingsScopeLike<RowConfig> | undefined
 }
-
-const MSYSTEM_OPTIONS: readonly MsystemSetting[] = ['auto', 'UCRT64', 'MINGW64', 'CLANG64', 'CLANGARM64', 'MINGW32', 'MSYS']
 
 const AUTO = '__auto__'
 const MANUAL = '__manual__'
@@ -123,14 +122,9 @@ const styles: Record<string, CSSProperties> = {
   code: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' },
 }
 
-/** Profile label for the selector. */
+/** Profile label for the selector: the host label plus the probed version. */
 function profileLabel(profile: BashProfileView): string {
-  const base = profile.flavor === 'git'
-    ? 'Git for Windows'
-    : profile.flavor === 'msys2'
-      ? `MSYS2 ${profile.msystem ?? 'MSYS'}`
-      : 'Cygwin'
-  return profile.version !== undefined ? `${base} ${profile.version}` : base
+  return profile.version !== undefined ? `${profile.label} ${profile.version}` : profile.label
 }
 
 /** Compare paths case-insensitively with either separator. */
@@ -189,6 +183,9 @@ export function TerminalToolRow({ t, scope }: TerminalToolRowProps): ReactElemen
       </div>
 
       {!state.writable ? <div style={styles.muted}>{state.scopeStatus === 'unavailable' ? t('unavailable') : t('readOnly')}</div> : null}
+      {!state.capability.supported && state.capability.reason !== undefined
+        ? <div style={styles.error}>{t('unsupported')}{state.capability.reason}</div>
+        : null}
 
       <div style={styles.row}>
         <span style={styles.label}>{t('shell')}</span>
@@ -274,7 +271,7 @@ export function TerminalToolRow({ t, scope }: TerminalToolRowProps): ReactElemen
               disabled={!state.writable || state.saving}
               onChange={event => void controller.setConfig({ msystem: event.target.value as MsystemSetting })}
             >
-              {MSYSTEM_OPTIONS.map(option => (
+              {MSYSTEM_SETTINGS.map(option => (
                 <option key={option} value={option} style={styles.option}>{option === 'auto' ? t('msystemAuto') : option}</option>
               ))}
             </select>

@@ -3,6 +3,68 @@
 All notable changes to this project are documented here. One version per
 entry; the Git history is the evidence.
 
+## 0.2.4 — 2026-11-06
+
+Audit release on top of the published `0.2.3`. No DSH contract drift; the
+changes harden failure paths, remove duplicated constants, and make the
+documentation match the implementation.
+
+### Fixed
+
+- **A composition without `ctx.sandboxPolicy` no longer installs a dead
+  `bash`**: the replacement now requires `ctx.sandboxPolicy.resolve` (bash runs
+  outside DSH's confinement, so this service is the only source of the session
+  mode), keeps `pwsh` otherwise, and the settings row shows the missing
+  capability. The previous build registered `bash` and failed on every call.
+- **`bashPath` must be absolute**: a relative path is rejected instead of being
+  resolved against the DSH host's current directory, which would silently
+  change the selected profile when the host cwd changed.
+- **Inherited `MSYSTEM` / `MSYS2_PATH_TYPE` are tombstoned**, like `PWD` and
+  `OLDPWD`. A Cygwin profile can no longer inherit `MSYSTEM` from the host.
+- **Client `/api` errors**: the carrier's 401/auth responses are plain text;
+  the row now reads the body and reports the status plus a bounded excerpt
+  instead of a `JSON.parse` exception.
+- **`compatcheck` now also checks the replacement target** (`dsh-tool-pwsh`:
+  `name: "pwsh"`, `tool:pwsh`, `getSectionOrder("TOOL_PWSH")`) so the plugin
+  cannot silently stop hiding the tool it replaces.
+- **Shell-neutral error text**: read-only/strict/spawn errors say “bash”, not
+  “Git Bash”, because the same path serves MSYS2 and Cygwin.
+
+### Changed
+
+- **Single-source constants**: `MSYSTEMS`, `MSYSTEM_SETTINGS`, `FLAVOR_LABELS`
+  and `stripMatchingQuotes` now live only in `src/shared/protocol.ts`; the host
+  discovery/config and the client row/store reference them. The MSYS2
+  environment order and the YAML quote handling can no longer drift between
+  host and browser.
+- **Dead code removed** (`renderJobRead`, `outcomeDetail`, `isForeground`,
+  `approvalOf`, a host-side `profileLabel`) and the approval ingredients are
+  built by the shared `approvalFor` helper.
+- **Docs corrected**: the fail-closed behavior when `sandboxPolicy` is missing,
+  the escalation advertisement conditions, the synthetic timeout text
+  (`[exit status unavailable]`), the Git/`msystem` mismatch rule, the full
+  MSYS2 preference order, and the integration-test scope (real SIGTERM/SIGKILL,
+  outside-workspace write, optional gcc; job mocks are unit tests).
+
+### Tests
+
+- 90 tests (up from 82): missing-`sandboxPolicy` replacement/capability,
+  read-only escalation, foreground-with-jobs settlement, Cygwin environment
+  tombstones, absolute `bashPath`, real SIGKILL, outside-workspace write and
+  the optional MSYS2 toolchain check.
+- Live audit on DSH `0.2.2-rc.1` (independent profile): 31/31 API/scenario
+  checks (Git/MSYS2, promote, background + `job_output`, signal, relative
+  workdir, subagent) and 15/15 settings-page checks (clean load, MSYS2 switch,
+  strict round-trip, advanced diagnostics, no console/network errors). Strict
+  refusal was also exercised from a real session. See `docs/SMOKE.md`.
+
+### Not covered
+
+- The Windows ACL sandbox experiment (“MSYS2 under the restricted token”) was
+  not re-run on 0.2.2; the source-level review in `docs/DESIGN.md` §2.1 stands.
+- `read-only` and the escalation approval dialog remain unit-covered rather
+  than clicked through the real UI.
+
 ## 0.2.3 — 2026-11-06
 
 DSH 0.2.2 synchronization. Baseline moves to desktop runtime `0.2.2-rc.1`

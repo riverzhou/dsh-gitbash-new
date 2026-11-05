@@ -133,6 +133,13 @@ const checks = [
     tokens: ['agent/created'],
   },
   {
+    // The replacement target itself: if this name or prompt section moves, the
+    // plugin would keep registering bash while leaving pwsh visible.
+    path: 'dsh/node_modules/@deepseek-ai/dsh-tool-pwsh/lib/index.js',
+    label: 'tool-pwsh (replacement target)',
+    tokens: ['name: "pwsh"', 'tool:pwsh', 'getSectionOrder("TOOL_PWSH")'],
+  },
+  {
     path: 'dsh/node_modules/@deepseek-ai/dsh-system-prompt/lib/index.js',
     label: 'system-prompt (orders)',
     tokens: ['TOOL_BASH: 1e3', 'TOOL_PWSH: 1010', 'getSectionOrder'],

@@ -1,7 +1,7 @@
 {
   "name": "@riverzh/dsh-gitbash",
   "description": "Windows Git Bash / MSYS2 terminal tool for DeepSeek Harness (DSH), replacing pwsh with a selectable bash profile",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "type": "module",
   "license": "GPL-3.0-only",
   "repository": {

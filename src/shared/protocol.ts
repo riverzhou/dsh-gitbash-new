@@ -15,11 +15,40 @@ export const ROUTE_VALIDATE = '/api/dsh-gitbash/validate'
 /** Which bash family a profile comes from. */
 export type BashFlavor = 'git' | 'msys2' | 'cygwin'
 
+/** Human labels for each family; one home for the host label and the client. */
+export const FLAVOR_LABELS: Record<BashFlavor, string> = {
+  git: 'Git for Windows',
+  msys2: 'MSYS2',
+  cygwin: 'Cygwin',
+}
+
+/** MSYS2 environments in preference order (also the selectable `MSYSTEM` values). */
+export const MSYSTEMS = ['UCRT64', 'MINGW64', 'CLANG64', 'CLANGARM64', 'MINGW32', 'MSYS'] as const
+
 /** MSYS2 environment selection; also the value of `MSYSTEM`. */
-export type Msystem = 'MINGW64' | 'UCRT64' | 'CLANG64' | 'CLANGARM64' | 'MINGW32' | 'MSYS'
+export type Msystem = typeof MSYSTEMS[number]
 
 /** `auto` derives the environment from the detected installation. */
 export type MsystemSetting = 'auto' | Msystem
+
+/** Every selectable MSYS2 environment setting, `auto` first. */
+export const MSYSTEM_SETTINGS: readonly MsystemSetting[] = ['auto', ...MSYSTEMS]
+
+/**
+ * Strip one matching pair of single/double quotes around a user/YAML value.
+ *
+ * Hand-edited profile patches and the settings input may keep the quotes that
+ * YAML would otherwise treat as syntax. The host and the browser row share this
+ * one normalizer so a saved path is read back exactly as it was written.
+ */
+export function stripMatchingQuotes(value: string): string {
+  const trimmed = value.trim()
+  if (trimmed.length < 2) return trimmed
+  const first = trimmed[0]
+  const last = trimmed[trimmed.length - 1]
+  if ((first === '"' && last === '"') || (first === "'" && last === "'")) return trimmed.slice(1, -1).trim()
+  return trimmed
+}
 
 /** Sandbox behavior under a constrained session. */
 export type CompatMode = 'auto' | 'strict'

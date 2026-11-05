@@ -1,5 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { existsSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { randomUUID } from 'node:crypto'
 import { composeEnv, createBashExecution, discoverBash } from '../lib/index.js'
 import { createRealSubprocess } from './helpers/real-subprocess.mjs'
 
@@ -43,6 +47,33 @@ test('a real signal-terminated bash reports SIGTERM, not exit 3840', { skip: git
   assert.equal(result.exitCode, null)
   assert.equal(result.signal, 'SIGTERM')
   assert.equal(result.timedOut, false)
+})
+
+test('a real SIGKILL-encoded exit reports SIGKILL, not exit 2304', { skip: git === undefined }, async () => {
+  const result = await run(git, 'kill -KILL $$')
+  assert.equal(result.exitCode, null)
+  assert.equal(result.signal, 'SIGKILL')
+  assert.equal(result.timedOut, false)
+})
+
+test('the unconfined deployment can write outside the workspace (documented trade-off)', { skip: git === undefined }, async (t) => {
+  const name = `dsh-gitbash-outside-${randomUUID()}.txt`
+  const file = join(tmpdir(), name)
+  t.after(() => rmSync(file, { force: true }))
+  const posix = file.replace(/\\/g, '/').replace(/^([A-Za-z]):/, (_, drive) => `/${drive.toLowerCase()}`)
+  const result = await run(git, `printf outside-ok > '${posix}' && cat '${posix}'`)
+  assert.equal(result.exitCode, 0)
+  assert.equal(result.stdout.text, 'outside-ok')
+  assert.equal(existsSync(file), true)
+})
+
+test('MSYS2 resolves a toolchain from its own environment bin when installed', { skip: msys2 === undefined }, async () => {
+  const result = await run(msys2, 'command -v gcc || true')
+  const line = result.stdout.text.trim()
+  const environmentDir = msys2.environmentRoot?.split('\\').pop()
+  if (line.length === 0 || environmentDir === undefined) return
+  // `/ucrt64/bin/gcc` inside the MSYS2 mount; the environment selected by the profile.
+  assert.equal(line.startsWith(`/${environmentDir}/bin/`), true)
 })
 
 test('a host-exported Windows PWD is removed so $PWD stays POSIX', { skip: git === undefined }, async () => {

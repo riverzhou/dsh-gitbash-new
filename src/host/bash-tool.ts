@@ -11,6 +11,7 @@
 import type { BashProfile } from './discover.ts'
 import { composeEnv, resolveWorkdir } from './env.ts'
 import {
+  approvalFor,
   approveEscalation,
   ESCALATION_TARGETS,
   escalationHintMarker,
@@ -571,13 +572,7 @@ export function createBashTool(runtime: BashToolRuntime): ToolDefinitionLike {
             effectiveMode: standingMode,
             subject: 'command',
           },
-          {
-            approver: runtime.approval,
-            agent: exec.agent,
-            callId: exec.callId,
-            toolName: 'bash',
-            signal: exec.signal,
-          },
+          approvalFor(exec, runtime.approval),
         )
       }
       const mode = approvedMode ?? standingMode
@@ -585,14 +580,14 @@ export function createBashTool(runtime: BashToolRuntime): ToolDefinitionLike {
       let sessionMode: string | undefined
       if (mode === 'read-only') {
         throw new Error(
-          'Git Bash cannot run in a read-only session: the Windows sandbox cannot start the MSYS2 runtime, and running unconfined would break the read-only promise. '
+          'bash cannot run in a read-only session: the Windows sandbox cannot start the MSYS2 runtime, and running unconfined would break the read-only promise. '
           + 'Switch the session permission to workspace-write (compatibility mode) or danger-full-access, or retry with sandbox_permissions: "workspace-write"/"danger-full-access" plus a justification.',
         )
       }
       if (mode === 'workspace-write') {
         if (runtime.compat === 'strict') {
           throw new Error(
-            'Git Bash cannot run under the Windows file sandbox: the MSYS2 runtime is blocked by the restricted token. '
+            'bash cannot run under the Windows file sandbox: the MSYS2 runtime is blocked by the restricted token. '
             + 'This deployment is in strict compatibility mode. Set Settings → General → Terminal tool → Compatibility to auto, switch the session to danger-full-access, '
             + 'or retry with sandbox_permissions: "danger-full-access" plus a one-sentence justification.',
           )

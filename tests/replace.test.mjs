@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { registerReplacement, replaceTerminalTool } from '../lib/index.js'
+import { probeDeploymentCapability, registerReplacement, replaceTerminalTool } from '../lib/index.js'
 import { createFakeSubprocess } from './helpers/fake-subprocess.mjs'
 
 const profile = {
@@ -127,6 +127,42 @@ test('an invalid profile is skipped', () => {
   })
   assert.equal(attempt.applied, false)
   assert.equal(attempt.reason, 'not installed')
+})
+
+test('a composition without ctx.sandboxPolicy keeps pwsh instead of registering a dead bash', () => {
+  const host = fakeHost()
+  const withoutPolicy = {
+    ...host,
+    get(name) {
+      return name === 'sandboxPolicy' ? undefined : host.get(name)
+    },
+  }
+  const tools = fakeTools()
+  const attempt = replaceTerminalTool(withoutPolicy, fakeAgent(tools, fakePrompt()), settings, profile)
+  assert.equal(attempt.applied, false)
+  assert.match(attempt.reason ?? '', /ctx\.sandboxPolicy\.resolve is not available/)
+  assert.equal(tools.restrictions.length, 0)
+  assert.equal(tools.registrations.length, 0)
+})
+
+test('deployment capability requires both subprocess and sandboxPolicy', () => {
+  const withServices = {
+    get(name) {
+      if (name === 'subprocess') return { spawn() {} }
+      if (name === 'sandboxPolicy') return { resolve() {} }
+      return undefined
+    },
+  }
+  const healthy = probeDeploymentCapability(withServices)
+  if (process.platform === 'win32') assert.equal(healthy.supported, true)
+  const noPolicy = {
+    get(name) {
+      return name === 'subprocess' ? { spawn() {} } : undefined
+    },
+  }
+  const degraded = probeDeploymentCapability(noPolicy)
+  assert.equal(degraded.supported, false)
+  assert.match(degraded.reason ?? '', /ctx\.sandboxPolicy/)
 })
 
 test('registerReplacement applies on agent/created and reports the attempt', () => {

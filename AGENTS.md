@@ -15,8 +15,8 @@
 | 文件 | 插件源码 + 构建产物 `lib/` + 文档/测试/脚本（见 §3） |
 | 源码 / 技术栈 | TypeScript（host ESM + client bundle）+ esbuild；`lib/` 已构建并入库 |
 | 项目定位 | ✅ **已确定并实现**（见 §1；设计见 `docs/DESIGN.md`） |
-| 版本 / 许可 | `0.2.3` / `GPL-3.0-only` |
-| 验证 | `pnpm test` 82/82；`pnpm selftest` 10/10；`pnpm compatcheck` 通过（运行时 `0.2.2-rc.1`，floor `>=0.2.2-0`）；DSH 0.2.2-rc.1 真机：Git + MSYS2 的 direct/promote/background/subagent、真实设置行与 UI 切换均通过（`docs/SMOKE.md`） |
+| 版本 / 许可 | `0.2.4` / `GPL-3.0-only` |
+| 验证 | `pnpm test` 90/90；`pnpm selftest` 10/10；`pnpm compatcheck` 通过（运行时 `0.2.2-rc.1`，floor `>=0.2.2-0`）；DSH 0.2.2-rc.1 真机：31/31 场景检查（Git/MSYS2、promote、后台、信号、workdir、子智能体）+ 15/15 设置行 UI 检查；strict 拒绝实测（`docs/SMOKE.md`） |
 | 平台 | Windows 10（19045）/ Git for Windows 2.56（bash 5.3.15）/ MSYS2 5.3.20（UCRT64） |
 | 运行时 | Node v24.21.0；DSH 桌面运行时 `0.2.2-rc.1` |
 | 已知硬约束 | Git Bash/MSYS2 无法在 DSH Windows ACL 沙箱内启动；兼容模式策略见 §1 与 README |
@@ -77,7 +77,7 @@
 
 ## 3. 目录约定
 
-当前（2026-10-18，已实现）：
+当前（2026-11-06，已实现）：
 
 ```text
 dsh-gitbash-new/
@@ -116,7 +116,7 @@ dsh-gitbash-new/
 │       └── types.ts       # 客户端契约窄化
 ├── tests/
 │   ├── helpers/           # fake / real subprocess
-│   └── *.test.mjs         # 82 个 node:test 用例（含真实 Git/MSYS2 集成）
+│   └── *.test.mjs         # 90 个 node:test 用例（含真实 Git/MSYS2 集成）
 ├── scripts/
 │   ├── selftest.mjs       # 纯逻辑自测
 │   └── compatcheck.mjs    # 对 app.asar 里的官方产物做契约字符串核对
@@ -217,4 +217,17 @@ dsh-gitbash-new/
     （`tests/escalation.test.mjs` 断言），否则非中英界面会掉回英文。
 18. **compatcheck 的版本下限**：脚本从本包 `engines.dsh` 推导 floor（当前
     `>=0.2.2-0`），读取部署的 `dsh/package.json`，低于 floor 直接失败；不要
-    在脚本里另写一份版本号。
+    在脚本里另写一份版本号。它还必须核对 `dsh-tool-pwsh` 的 `name: "pwsh"` 与
+    `tool:pwsh`——替换目标漂移时不能只因为 bash 契约还在就放行。
+19. **替换前置能力**：`ctx.subprocess.spawn` 或 `ctx.sandboxPolicy.resolve`
+    缺失时不替换，保留 preset 的 `pwsh`；设置行显示缺失能力。bash 在沙箱外启动，
+    policy 服务是会话模式的唯一来源，不能为了“有 bash”而放宽 fail-closed。
+20. **`bashPath` 必须绝对**：相对路径会随宿主 cwd 漂移，`profileFromPath`
+    直接报错；`/validate` 与设置页都以绝对 Windows 路径为准。
+21. **环境 tombstone 不止 PWD**：继承的 `MSYSTEM` / `MSYS2_PATH_TYPE` 也要
+    用 `undefined` 删除；Cygwin 不能继承 Git/MSYS2 会话留下的 `MSYSTEM`。
+22. **单一事实来源（0.2.4 审计）**：`MSYSTEMS` / `MSYSTEM_SETTINGS` /
+    `FLAVOR_LABELS` / `stripMatchingQuotes` 只在 `src/shared/protocol.ts` 定义；
+    host 与 client 只引用，不再各留一份列表或引号剥离函数。
+23. **client `/api` 错误**：carrier 的 401/权限错误是纯文本，不能直接
+    `response.json()`；先读文本、再尝试 JSON，错误信息带状态码与截断正文。

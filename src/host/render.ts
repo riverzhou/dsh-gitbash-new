@@ -130,13 +130,6 @@ export function renderPromoted(promoted: PromotedValue): string {
   return `${body}${compat !== undefined ? `${compat}\n` : ''}[still running after ${promoted.timeoutMs}ms; moved to background job ${promoted.jobId}]`
 }
 
-/** Render a background job's later output read (used by job tools, not this tool). */
-export function renderJobRead(delta: string, lossy: boolean, spillPaths: readonly string[]): string {
-  if (!lossy) return delta
-  const notice = `[some output was dropped from memory; full output: ${spillPaths.length > 0 ? spillPaths.join(', ') : '(unavailable)'}]`
-  return `${delta}${delta.length > 0 && !delta.endsWith('\n') ? '\n' : ''}${notice}`
-}
-
 /** Merge a job's ring chunks the way the tool's promoted output reads. */
 export function ringDelta(chunks: readonly { text: string; channel?: string }[]): string {
   const out = chunks.filter(chunk => chunk.channel !== 'stderr').map(chunk => chunk.text).join('')
@@ -157,11 +150,4 @@ export function detectStartupFailure(stderr: string): string | undefined {
 function firstLine(text: string): string | undefined {
   const line = text.split(/\r?\n/).map(item => item.trim()).find(item => item.length > 0)
   return line === undefined ? undefined : line.slice(0, 300)
-}
-
-/** Job outcome text for both startup and exit. */
-export function outcomeDetail(status: 'completed' | 'killed' | 'failed', exitCode: number | null, signal: string | null): string {
-  if (status === 'killed') return signal !== null ? `signal: ${signal}` : 'killed before exit'
-  if (status === 'failed') return 'failed before exit'
-  return `exit code: ${exitCode ?? 0}`
 }

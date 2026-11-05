@@ -3,7 +3,7 @@
  * terminal outcome it records, and the cancellation bridge.
  */
 import type { BashExecution } from './executor.ts'
-import { ringDelta, type BashValue } from './render.ts'
+import { ringDelta } from './render.ts'
 import type { JobHooksLike, JobOutcomeLike, JobOutputSourceLike } from './types.ts'
 
 export { ringDelta }
@@ -70,9 +70,4 @@ export function processJob(
     },
     done,
   }
-}
-
-/** Type guard for a foreground value (used by the tool's result paths). */
-export function isForeground(value: BashValue): value is Extract<BashValue, { kind: 'foreground' }> {
-  return value.kind === 'foreground'
 }

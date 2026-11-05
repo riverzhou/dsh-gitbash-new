@@ -161,6 +161,37 @@ test('a timed-out foreground call is promoted by the job registry', async () => 
   assert.equal(rendered.includes('moved to background job bash-test'), true)
 })
 
+test('approved escalation from read-only still runs', async () => {
+  const subprocess = createFakeSubprocess({ stdout: 'ran\n' })
+  const tool = createBashTool(runtime({
+    subprocess,
+    sandboxPolicy: { resolve: () => ({ mode: 'read-only', workspaceRoot: process.cwd() }) },
+    approval: { async request() { return 'allowed-once' } },
+  }))
+  const value = await tool.execute({
+    command: 'echo ran',
+    description: 'run after approval',
+    sandbox_permissions: 'danger-full-access',
+    justification: 'the read-only session needs this one write',
+  }, execution())
+  assert.equal(value.kind, 'foreground')
+  assert.equal(value.compat, undefined)
+  assert.equal(subprocess.calls.length, 1)
+})
+
+test('a foreground call with a job registry settles through the job and removes it', async () => {
+  const jobs = createFakeJobs('background')
+  const removals = []
+  const remove = jobs.remove
+  jobs.remove = (...args) => { removals.push(args); remove(...args) }
+  const subprocess = createFakeSubprocess({ stdout: 'settled\n' })
+  const tool = createBashTool(runtime({ subprocess, jobs }))
+  const value = await tool.execute({ command: 'echo settled', description: 'settle' }, execution())
+  assert.equal(value.kind, 'foreground')
+  assert.equal(value.stdout.text, 'settled\n')
+  assert.equal(removals.length, 1)
+})
+
 test('presentCall and presentResult keep the terminal card contract', () => {
   const tool = createBashTool(runtime())
   const call = tool.presentCall({ command: 'echo hi', description: 'say hi', workdir: 'C:\\work' })

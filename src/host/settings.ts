@@ -8,19 +8,11 @@
  * watcher or a restart.
  */
 import z from '@deepseek-ai/schemastery'
+import { MSYSTEM_SETTINGS, stripMatchingQuotes } from '../shared/protocol.ts'
 import type { CompatMode, MsystemSetting } from '../shared/protocol.ts'
 import type { TerminalToolSettings, VolatileLike } from './types.ts'
 
-/** MSYS2 environments the UI may pin; `auto` derives one from the install. */
-export const MSYSTEM_SETTINGS: readonly MsystemSetting[] = [
-  'auto',
-  'UCRT64',
-  'MINGW64',
-  'CLANG64',
-  'CLANGARM64',
-  'MINGW32',
-  'MSYS',
-]
+export { MSYSTEM_SETTINGS }
 
 export const COMPAT_MODES: readonly CompatMode[] = ['auto', 'strict']
 
@@ -45,13 +37,7 @@ export const Config = z.object({
 
 /** Strip the whitespace and matching YAML quotes a hand-edited patch may carry. */
 export function normalizeBashPath(value: string): string {
-  const trimmed = value.trim()
-  if (trimmed.length >= 2) {
-    const first = trimmed[0]
-    const last = trimmed[trimmed.length - 1]
-    if ((first === '"' && last === '"') || (first === "'" && last === "'")) return trimmed.slice(1, -1).trim()
-  }
-  return trimmed
+  return stripMatchingQuotes(value)
 }
 
 /** Read a volatile field; plain values are accepted for unit tests. */

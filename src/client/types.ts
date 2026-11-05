@@ -50,7 +50,10 @@ export interface SettingsScopeLike<T> {
 export interface ConfigFormsLike {
   get<T>(entryId: string): SettingsScopeLike<T>
   /** Invoke `register` once the given namespaces are served (0.2.2). */
-  whileServed?(namespaces: readonly string[], register: () => void): unknown
+  whileServed?(
+    namespaces: readonly string[],
+    register: (served: ReadonlySet<string>) => (() => void) | void,
+  ): unknown
 }
 
 /** The family compatibility binder (`webUiSettings` / old `settingsScope`). */
