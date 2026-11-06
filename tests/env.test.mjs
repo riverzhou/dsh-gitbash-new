@@ -158,10 +158,10 @@ test('a Cygwin profile removes inherited MSYSTEM/MSYS2_PATH_TYPE', () => {
 
 test('composeEnv clears inherited shell startup and option variables', () => {
   const env = composeEnv(profile({}), {
-    PATH: 'C:\Windows',
-    BASH_ENV: 'C:\evil.sh',
-    ENV: 'C:\evil.sh',
-    CDPATH: 'C:\somewhere',
+    PATH: String.raw`C:\Windows`,
+    BASH_ENV: String.raw`C:\evil.sh`,
+    ENV: String.raw`C:\evil.sh`,
+    CDPATH: String.raw`C:\somewhere`,
     GLOBIGNORE: '*',
     POSIXLY_CORRECT: '1',
     SHELLOPTS: 'xtrace',

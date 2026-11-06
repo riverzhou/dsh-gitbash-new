@@ -285,7 +285,7 @@ test('presentResult recognizes a background result from the tool value alone', (
   const tool = createBashTool(runtime())
   const result = tool.presentResult(undefined, {
     content: [{ type: 'text', text: 'started background job bash-abc' }],
-    value: { kind: 'background', jobId: 'bash-abc', cwd: 'C:\work' },
+    value: { kind: 'background', jobId: 'bash-abc', cwd: String.raw`C:\work` },
     isError: false,
   })
   assert.equal(result.card, 'generic')
