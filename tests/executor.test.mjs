@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { BashSpawnError, createBashExecution, normalizeWindowsExit } from '../lib/index.js'
+import { BashSpawnError, createBashExecution, normalizeWindowsExit, processOutcome } from '../lib/index.js'
 import { createFakeSubprocess } from './helpers/fake-subprocess.mjs'
 
 const profile = {
@@ -109,6 +109,9 @@ test('provider rejection surfaces as a spawn error from result()', async () => {
   }
   const execution = createBashExecution(subprocess, profile, request)
   await assert.rejects(execution.result(), (error) => error instanceof BashSpawnError)
+  const outcome = processOutcome(execution)
+  assert.equal(outcome.status, 'failed')
+  assert.match(outcome.detail, /EPERM/)
 })
 
 test('a synchronous spawn throw is a BashSpawnError', () => {

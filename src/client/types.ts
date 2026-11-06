@@ -52,8 +52,8 @@ export interface ConfigFormsLike {
   /** Invoke `register` once the given namespaces are served (0.2.2). */
   whileServed?(
     namespaces: readonly string[],
-    register: (served: ReadonlySet<string>) => (() => void) | void,
-  ): unknown
+    register: (served: ReadonlySet<string>) => () => void,
+  ): () => void
 }
 
 /** The family compatibility binder (`webUiSettings` / old `settingsScope`). */

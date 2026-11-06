@@ -70,10 +70,12 @@ usage, the security model, settings, troubleshooting and development.
   runs bash unconfined and labels the result with `[compat: ...]`, `read-only`
   refuses, and `strict` allows only `danger-full-access`. See
   [Security model](#security-model-read-this-first).
-- **Verified**: 95 unit and integration tests, plus real-machine smoke on DSH
+- **Verified**: 97 unit and integration tests, plus real-machine smoke on DSH
   `0.2.2-rc.1` with Git and MSYS2 (direct, promoted, background and subagent
-  calls; 0.2.4 audit round 31/31 scenario + 15/15 settings-page checks, and
-  0.2.5's manual-path UI flow 13/13).
+  calls; 0.2.4 audit round 31/31 + 15/15 settings-page checks; 0.2.5 manual-path
+  UI flow 13/13; 0.2.6 read-only refusal, approval allow/deny, hostile
+  `BASH_ENV`/function clearing, large-output spill, job kill and a clean final
+  settings row).
 
 ---
 
@@ -127,7 +129,7 @@ Reopen DSH, then hard-refresh the Web UI (`Ctrl+Shift+R`).
 ### From npm (published)
 
 ```bat
-%DSH_CLI% plugin --profile desktop add @riverzh/dsh-gitbash@0.2.5
+%DSH_CLI% plugin --profile desktop add @riverzh/dsh-gitbash@0.2.6
 ```
 
 Use `@riverzh/dsh-gitbash@latest` for the newest release.
@@ -372,6 +374,14 @@ This was a real-machine bug: before normalization, a Git profile reported
 - MSYS2 also gets `MSYS2_PATH_TYPE=inherit`.
 - The other family's roots are filtered out. A Git session does not inherit
   `C:\msys64\usr\bin`; an MSYS2 session does not inherit Git's `usr\bin`.
+- Inherited shell startup/function state is cleared (`BASH_ENV`, `ENV`,
+  `BASH_FUNC_*`, `SHELLOPTS`, `BASHOPTS`, `CDPATH`, `GLOBIGNORE`,
+  `POSIXLY_CORRECT`, `PS4`, `IFS`, …). A host shell cannot inject a startup
+  script or exported function into every `bash -c`.
+- An explicit MSYS2 environment `bin\bash.exe` path (for example
+  `<root>\mingw64\bin\bash.exe`) infers `MINGW64` when `msystem=auto`; with an
+  explicit mismatching `msystem` it is rejected instead of mixing the binary
+  with another environment's `MSYSTEM`/PATH.
 - `DSH_*` facts are merged last, so they win. `HOME`, `TMP`, `TEMP` and `LANG`
   are not overridden.
 
@@ -547,7 +557,11 @@ For a full real-machine transcript, see [docs/SMOKE.md](docs/SMOKE.md).
 SIGTERM normalization, relative workdir, strict refusal and the real settings
 row (MSYS2 switch through the UI) were exercised — 31/31 scenario checks and
 15/15 UI checks on a clean browser load. The 0.2.5 audit added a 13/13 manual
-path flow (MSYS2 → Git) through the real UI. Raw events: [docs/SMOKE.md](docs/SMOKE.md).
+path flow (MSYS2 → Git) through the real UI. The 0.2.6 audit added read-only
+refusal, approval allow/deny, workspace-write escalation labeling, a 108 KB
+tail/spill result, a live `job_kill`, `/tmp` workdir, end-to-end clearing of a
+hostile `BASH_ENV`/exported function, and a clean final settings row. Raw
+events: [docs/SMOKE.md](docs/SMOKE.md).
 
 ---
 
@@ -557,7 +571,7 @@ path flow (MSYS2 → Git) through the real UI. Raw events: [docs/SMOKE.md](docs/
 pnpm install
 pnpm build        # lib/index.js + lib/client.js
 pnpm check        # tsc --noEmit
-pnpm test         # node:test; 95 tests, including real Git/MSYS2 when present
+pnpm test         # node:test; 97 tests, including real Git/MSYS2 when present
 pnpm selftest     # pure-logic checks, no DSH needed
 pnpm compatcheck  # contract-string check against the installed DSH
 ```

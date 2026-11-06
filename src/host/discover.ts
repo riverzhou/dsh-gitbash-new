@@ -321,7 +321,19 @@ export function profileFromPath(
     }
     return { profile: makeProfile('cygwin', root, trimmed, undefined, probe) }
   }
-  const selected = msystem === 'auto' ? defaultMsystemFor(root) : msystem
+  const key = normalizePathKey(trimmed)
+  const pathEnvironment = MSYS2_ENVIRONMENTS.find(env =>
+    env.dir !== '' && key.endsWith(`\\${env.dir}\\bin\\bash.exe`))
+  let selected: Msystem = msystem === 'auto' ? defaultMsystemFor(root) : msystem
+  if (pathEnvironment !== undefined) {
+    // An explicit environment bin path is authoritative when msystem is auto;
+    // with an explicit msystem it must agree, or the shell would be launched
+    // with another environment's MSYSTEM/PATH.
+    if (msystem === 'auto') selected = pathEnvironment.msystem
+    else if (selected !== pathEnvironment.msystem) {
+      return { problem: `bash path belongs to MSYS2 ${pathEnvironment.msystem}, not ${selected}` }
+    }
+  }
   const envRoot = environmentRootFor(root, selected)
   if (envRoot === undefined || !isDirectory(winJoin(envRoot, 'bin'))) {
     return { problem: `MSYS2 environment ${selected} is not installed under ${root}` }

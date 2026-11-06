@@ -49,6 +49,8 @@ export interface BashExecution {
   readonly signal: NodeJS.Signals | null
   /** MSYS2 startup failure detected from stderr and converted to a failure. */
   readonly startupFailure?: string
+  /** Provider failure after spawn (reported instead of a bare killed status). */
+  readonly failure?: string
   readonly observed: BashObserved
   readonly done: Promise<void>
   kill(): void
@@ -237,6 +239,7 @@ export function createBashExecution(
     get exitCode() { return exitCode },
     get signal() { return signal },
     get startupFailure() { return startupFailure },
+    get failure() { return providerError === undefined ? undefined : providerMessage(profile, providerError) },
     observed: { stdout, stderr },
     done,
     kill() {
@@ -261,7 +264,7 @@ export function createBashExecution(
     async result(): Promise<ForegroundValue> {
       await done
       if (providerError !== undefined) {
-        throw new BashSpawnError(spawnMessage(profile, providerError))
+        throw new BashSpawnError(providerMessage(profile, providerError))
       }
       const out = collect(stdout)
       let err = collect(stderr)
@@ -299,4 +302,10 @@ function spawnMessage(profile: BashProfile, error: unknown): string {
   const detail = error instanceof Error ? error.message : String(error)
   return `bash could not start (${profile.label} at ${profile.path}): ${detail}. `
     + 'Re-run "auto discover" in Settings → General → Terminal tool, or fix the path.'
+}
+
+/** Provider failure after the process was spawned (not a start failure). */
+function providerMessage(profile: BashProfile, error: unknown): string {
+  const detail = error instanceof Error ? error.message : String(error)
+  return `bash execution failed (${profile.label} at ${profile.path}): ${detail}`
 }

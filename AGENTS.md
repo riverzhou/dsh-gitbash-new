@@ -15,8 +15,8 @@
 | 文件 | 插件源码 + 构建产物 `lib/` + 文档/测试/脚本（见 §3） |
 | 源码 / 技术栈 | TypeScript（host ESM + client bundle）+ esbuild；`lib/` 已构建并入库 |
 | 项目定位 | ✅ **已确定并实现**（见 §1；设计见 `docs/DESIGN.md`） |
-| 版本 / 许可 | `0.2.5` / `GPL-3.0-only` |
-| 验证 | `pnpm test` 95/95；`pnpm selftest` 10/10；`pnpm compatcheck` 通过（运行时 `0.2.2-rc.1`，floor `>=0.2.2-0`）；DSH 0.2.2-rc.1 真机：31/31 场景检查（Git/MSYS2、promote、后台、信号、workdir、子智能体）+ 15/15 设置行 UI 检查 + 13/13 手动路径 UI 流程；strict 拒绝实测（`docs/SMOKE.md`） |
+| 版本 / 许可 | `0.2.6` / `GPL-3.0-only` |
+| 验证 | `pnpm test` 97/97；`pnpm selftest` 10/10；`pnpm compatcheck` 通过（运行时 `0.2.2-rc.1`，floor `>=0.2.2-0`）；DSH 0.2.2-rc.1 真机：31/31 场景检查（Git/MSYS2、promote、后台、信号、workdir、子智能体）+ 15/15 设置行 UI 检查 + 13/13 手动路径 UI 流程 + 0.2.6 read-only/审批/大输出/job kill/恶意环境清除项；strict 拒绝实测（`docs/SMOKE.md`） |
 | 平台 | Windows 10（19045）/ Git for Windows 2.56（bash 5.3.15）/ MSYS2 5.3.20（UCRT64） |
 | 运行时 | Node v24.21.0；DSH 桌面运行时 `0.2.2-rc.1` |
 | 已知硬约束 | Git Bash/MSYS2 无法在 DSH Windows ACL 沙箱内启动；兼容模式策略见 §1 与 README |
@@ -116,7 +116,7 @@ dsh-gitbash-new/
 │       └── types.ts       # 客户端契约窄化
 ├── tests/
 │   ├── helpers/           # fake / real subprocess
-│   └── *.test.mjs         # 95 个 node:test 用例（含真实 Git/MSYS2 集成）
+│   └── *.test.mjs         # 97 个 node:test 用例（含真实 Git/MSYS2 集成）
 ├── scripts/
 │   ├── selftest.mjs       # 纯逻辑自测
 │   └── compatcheck.mjs    # 对 app.asar 里的官方产物做契约字符串核对
@@ -226,9 +226,10 @@ dsh-gitbash-new/
     直接报错；`/validate` 与设置页都以绝对 Windows 路径为准。
 21. **环境 tombstone 不止 PWD**：继承的 `MSYSTEM` / `MSYS2_PATH_TYPE` 也要
     用 `undefined` 删除；Cygwin 不能继承 Git/MSYS2 会话留下的 `MSYSTEM`。
-22. **单一事实来源（0.2.4 审计）**：`MSYSTEMS` / `MSYSTEM_SETTINGS` /
-    `FLAVOR_LABELS` / `stripMatchingQuotes` 只在 `src/shared/protocol.ts` 定义；
-    host 与 client 只引用，不再各留一份列表或引号剥离函数。
+22. **单一事实来源（0.2.4/0.2.6 审计）**：`MSYSTEMS` / `MSYSTEM_SETTINGS` /
+    `COMPAT_MODES` / `FLAVOR_LABELS` / `stripMatchingQuotes` 只在
+    `src/shared/protocol.ts` 定义；host 与 client 只引用，不再各留一份列表、
+    兼容模式枚举或引号剥离函数。
 23. **client `/api` 错误**：carrier 的 401/权限错误是纯文本，不能直接
     `response.json()`；先读文本、再尝试 JSON，错误信息带状态码与截断正文。
 24. **发现阶段的探测不继承宿主环境**：`probeBashVersion` 用 `env: {}` 执行
@@ -246,3 +247,22 @@ dsh-gitbash-new/
 28. **测试入口先构建**：`pretest`/`preselftest` 先跑 `build`，避免测试/自测
     实际加载陈旧 `lib/` 而“假绿”。`tsconfig` 开启 `noUnusedLocals`/
     `noUnusedParameters`，死代码在 `pnpm check` 阶段即失败。
+
+29. **清除继承的 shell 启动/函数状态（0.2.6）**：`composeEnv` 必须 tombstone
+    `BASH_ENV` / `ENV` / `SHELLOPTS` / `BASHOPTS` / `CDPATH` / `GLOBIGNORE` /
+    `POSIXLY_CORRECT` / `BASH_COMPAT` / `BASH_XTRACEFD` / `PS4` /
+    `PROMPT_COMMAND` / `IFS`，并逐个 tombstone 继承的 `BASH_FUNC_*`。真机
+    以恶意 `BASH_ENV` + 导出函数启动 DSH，命令仍得到 `BASH_ENV=UNSET`、
+    `CLEAN`、`FUNC_GONE`，marker 未生成。
+30. **MSYS2 环境 bin 路径推断（0.2.6）**：手填 `<root>\<env>\bin\bash.exe` 时，
+    `msystem=auto` 必须采用路径所属环境；显式 `msystem` 不匹配必须拒绝。否则
+    UCRT64 二进制会带着 MINGW64 的 `MSYSTEM`/PATH 运行。
+31. **客户端 `whileServed` 契约（0.2.6）**：回调必须返回 `slots.inject/register`
+    的 disposer；设置行要能随 namespace 消失而注销、再出现时重新挂载。
+    `seatRow` 返回 release，`seat`/`whileServed` 用 `ctx.effect` 持有。
+32. **刷新必须清空候选（0.2.6）**：`/state` 返回空 `candidates` 时，客户端要清空
+    旧列表；保留旧值会让已卸载的 Git/MSYS2 继续出现在 Shell 下拉里。
+33. **Provider 失败不是裸 killed（0.2.6）**：`BashExecution.failure` 暴露 spawn
+    之后的 provider 错误，`processOutcome` 必须映射为 `failed`；presenter 还要
+    从 `value.kind`、promote 标记文本（允许 DSH spill footer 跟随）与 background
+    确认文本兜底。

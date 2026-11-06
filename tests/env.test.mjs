@@ -107,7 +107,7 @@ test('cross-drive static guards still exclude MSYS2/Git', () => {
     environmentRoot: 'C:\\msys64\\ucrt64',
     label: 'MSYS2 UCRT64',
   })
-  const msysPath = composePath(msys, 'D:\\Program Files\\Git\\bin;C:\\Tools')
+  const msysPath = composePath(msys, 'D:\\Program Files\\Git\\bin;C:\\Program Files (x86)\\Git\\usr\\bin;C:\\Tools')
   assert.equal(msysPath.toLowerCase().includes('git'), false)
 })
 
@@ -154,4 +154,27 @@ test('a Cygwin profile removes inherited MSYSTEM/MSYS2_PATH_TYPE', () => {
   assert.equal(Object.hasOwn(env, 'MSYS2_PATH_TYPE'), true)
   assert.equal(env.MSYSTEM, undefined)
   assert.equal(env.MSYS2_PATH_TYPE, undefined)
+})
+
+test('composeEnv clears inherited shell startup and option variables', () => {
+  const env = composeEnv(profile({}), {
+    PATH: 'C:\Windows',
+    BASH_ENV: 'C:\evil.sh',
+    ENV: 'C:\evil.sh',
+    CDPATH: 'C:\somewhere',
+    GLOBIGNORE: '*',
+    POSIXLY_CORRECT: '1',
+    SHELLOPTS: 'xtrace',
+    BASHOPTS: 'globstar',
+    BASH_COMPAT: '4.2',
+    BASH_XTRACEFD: '9',
+    PS4: '$(evil)',
+    PROMPT_COMMAND: 'evil',
+    IFS: ':',
+    'BASH_FUNC_evil%%': '() { :; }',
+  })
+  for (const key of ['BASH_ENV', 'ENV', 'CDPATH', 'GLOBIGNORE', 'POSIXLY_CORRECT', 'SHELLOPTS', 'BASHOPTS', 'BASH_COMPAT', 'BASH_XTRACEFD', 'PS4', 'PROMPT_COMMAND', 'IFS', 'BASH_FUNC_evil%%']) {
+    assert.equal(Object.hasOwn(env, key), true, key)
+    assert.equal(env[key], undefined, key)
+  }
 })

@@ -8,13 +8,11 @@
  * watcher or a restart.
  */
 import z from '@deepseek-ai/schemastery'
-import { MSYSTEM_SETTINGS, stripMatchingQuotes } from '../shared/protocol.ts'
+import { COMPAT_MODES, MSYSTEM_SETTINGS, stripMatchingQuotes } from '../shared/protocol.ts'
 import type { CompatMode, MsystemSetting } from '../shared/protocol.ts'
 import type { TerminalToolSettings, VolatileLike } from './types.ts'
 
 export { MSYSTEM_SETTINGS }
-
-export const COMPAT_MODES: readonly CompatMode[] = ['auto', 'strict']
 
 export const SETTINGS_DEFAULTS: TerminalToolSettings = {
   bashPath: '',

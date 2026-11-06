@@ -61,9 +61,11 @@
 - **显式安全**：绝不静默放宽权限——`workspace-write` 下以完全访问运行并在结果里
   标注 `[compat: ...]`，`read-only` 拒绝，`strict` 只允许 `danger-full-access`。
   详见[安全边界](#安全边界先读)。
-- **已验证**：95 个单元/集成用例，加上 DSH `0.2.2-rc.1` 上的 Git 与 MSYS2 真机
+- **已验证**：97 个单元/集成用例，加上 DSH `0.2.2-rc.1` 上的 Git 与 MSYS2 真机
   冒烟（直连、promote、后台、子智能体；0.2.4 审计轮 31/31 场景检查 + 15/15
-  设置页检查，含 strict 实机拒绝；0.2.5 手动路径 UI 流程 13/13）。
+  设置页检查，含 strict 实机拒绝；0.2.5 手动路径 UI 流程 13/13；0.2.6 的
+  read-only 拒绝、审批允许/拒绝、恶意 `BASH_ENV`/导出函数清除、大输出 spill、
+  job kill 与干净最终设置行）。
 
 ---
 
@@ -117,7 +119,7 @@ set "DSH_CLI=%LOCALAPPDATA%\Programs\DeepSeek Harness\resources\runtime\cli\bin\
 ### 从 npm 安装（已发布）
 
 ```bat
-%DSH_CLI% plugin --profile desktop add @riverzh/dsh-gitbash@0.2.5
+%DSH_CLI% plugin --profile desktop add @riverzh/dsh-gitbash@0.2.6
 ```
 
 最新版可用 `@riverzh/dsh-gitbash@latest`。
@@ -335,6 +337,12 @@ Git for Windows 有两个入口：
 - MSYS2 额外设置 `MSYS2_PATH_TYPE=inherit`。
 - 另一套系统的根会被过滤：Git 会话不继承 `C:\msys64\usr\bin`；MSYS2 会话不继承
   Git 的 `usr\bin`。
+- 继承的 shell 启动/函数状态会被清除（`BASH_ENV`、`ENV`、`BASH_FUNC_*`、
+  `SHELLOPTS`、`BASHOPTS`、`CDPATH`、`GLOBIGNORE`、`POSIXLY_CORRECT`、`PS4`、
+  `IFS` 等），宿主 shell 不能把启动脚本或导出函数注入每次 `bash -c`。
+- 手填 MSYS2 环境 `bin\bash.exe`（如 `<root>\mingw64\bin\bash.exe`）时，
+  `msystem=auto` 会推断出 `MINGW64`；显式指定不匹配的 `msystem` 会被拒绝，
+  不会把二进制和另一套环境的 `MSYSTEM`/PATH 混用。
 - `DSH_*` 最后合并，保证优先；`HOME`、`TMP`、`TEMP`、`LANG` 不覆盖。
 
 ### 发现顺序
@@ -492,7 +500,10 @@ WSL 一律排除：`System32\bash.exe`、`Sysnative`、`WindowsApps`、`\\wsl$`�
 5.3.20（UCRT64）；直接 bash、promote、后台任务、子智能体、SIGTERM 归一化、
 相对 workdir、strict 拒绝与真实设置行（通过 UI 切到 MSYS2）均已跑过——干净加载
 下 31/31 场景检查 + 15/15 UI 检查。0.2.5 审计又通过真实 UI 跑了 13/13 手动路径
-流程（MSYS2 → Git）。原始事件见 [docs/SMOKE.md](docs/SMOKE.md)。
+流程（MSYS2 → Git）。0.2.6 审计新增 read-only 拒绝、审批允许/拒绝、
+workspace-write 提权标注、108 KB 尾部/spill、实机 `job_kill`、`/tmp` workdir、
+端到端清除恶意 `BASH_ENV`/导出函数，以及干净的最终设置行。原始事件见
+[docs/SMOKE.md](docs/SMOKE.md)。
 
 ---
 
@@ -502,7 +513,7 @@ WSL 一律排除：`System32\bash.exe`、`Sysnative`、`WindowsApps`、`\\wsl$`�
 pnpm install
 pnpm build        # lib/index.js + lib/client.js
 pnpm check        # tsc --noEmit
-pnpm test         # node:test；95 个用例，含真实 Git/MSYS2（存在时）
+pnpm test         # node:test；97 个用例，含真实 Git/MSYS2（存在时）
 pnpm selftest     # 纯逻辑自测，不需要 DSH
 pnpm compatcheck  # 对已安装 DSH 做契约字符串核对
 ```

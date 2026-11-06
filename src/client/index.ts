@@ -113,18 +113,48 @@ export function apply(ctx: PluginClientContextLike): void {
   }
 
   let seated = false
-  const seatRow = (scope: SettingsScopeLike<RowConfig> | undefined): void => {
-    if (seated) return
+  let seatDispose: (() => void) | undefined
+  const noop = (): void => {}
+  /** Seat the row and return the disposer that unregisters it. */
+  const seatRow = (scope: SettingsScopeLike<RowConfig> | undefined): (() => void) => {
+    if (seated) return seatDispose ?? noop
     seated = true
+    let inner: (() => void) | undefined
+    const release = (): void => {
+      try {
+        inner?.()
+      } catch {
+        // The slot was already released by a plugin/context teardown.
+      }
+      if (seatDispose === release) {
+        seatDispose = undefined
+        seated = false
+      }
+    }
     try {
-      slots.inject('settings.general.item', () => slots.register(
+      const dispose = slots.inject('settings.general.item', () => slots.register(
         { name: 'settings.general.item', id: GENERAL_ITEM_ID, order: GENERAL_ITEM_ORDER, locale: LOCALE_NS },
         () => createElement(TerminalToolRow, { t, scope }),
       ))
+      if (typeof dispose === 'function') inner = dispose as () => void
+      seatDispose = release
+      return release
     } catch {
       // A duplicate slot id after an HMR re-apply is not fatal; leave the row
       // unseated instead of letting the client plugin throw.
       seated = false
+      return noop
+    }
+  }
+  /** Own a one-shot seat for the plugin lifetime. */
+  const seat = (scope: SettingsScopeLike<RowConfig> | undefined): void => {
+    const dispose = seatRow(scope)
+    if (dispose !== noop && typeof ctx.effect === 'function') {
+      try {
+        ctx.effect(() => dispose, 'dsh-gitbash: settings row')
+      } catch {
+        // The row is live; context teardown may still release the slot.
+      }
     }
   }
 
@@ -132,43 +162,55 @@ export function apply(ctx: PluginClientContextLike): void {
   if (family !== undefined) {
     const scoped = bind(family) ?? nativeForm()
     if (scoped !== undefined) {
-      seatRow(scoped)
+      seat(scoped)
       return
     }
   }
   const native = nativeForm()
   if (native !== undefined) {
-    seatRow(native)
+    seat(native)
     return
   }
   // The settings domain may activate after this plugin. Both services are
   // optional lookups; hard-injecting them would leave the row pending forever
   // on compositions that never provide them.
   if (typeof ctx.inject === 'function') {
-    ctx.inject(['webUiSettings'], () => {
-      if (seated) return
-      const late = binder()
-      if (late !== undefined) seatRow(bind(late))
-    })
-    ctx.inject(['configForms'], () => {
-      if (seated) return
-      const late = nativeForm()
-      if (late !== undefined) {
-        seatRow(late)
-        return
-      }
-      const forms = ctx.get('configForms') as ConfigFormsLike | undefined
-      if (typeof forms?.whileServed === 'function') {
-        try {
-          forms.whileServed([SETTINGS_NAMESPACE], () => {
-            if (seated) return
-            const served = nativeForm()
-            if (served !== undefined) seatRow(served)
-          })
-        } catch {
-          // Leave the row unseated; the user can reload once the settings domain is up.
+    try {
+      ctx.inject(['webUiSettings'], () => {
+        if (seated) return
+        const late = binder()
+        const scoped = late !== undefined ? bind(late) : undefined
+        if (scoped !== undefined) seat(scoped)
+      })
+    } catch {
+      // Late activation is optional; the native form path still works.
+    }
+    try {
+      ctx.inject(['configForms'], () => {
+        if (seated) return
+        const late = nativeForm()
+        if (late !== undefined) {
+          seat(late)
+          return
         }
-      }
-    })
+        const forms = readService<ConfigFormsLike>(ctx, 'configForms')
+        if (typeof forms?.whileServed === 'function') {
+          const whileServed = forms.whileServed.bind(forms)
+          const startWatch = (): (() => void) => whileServed([SETTINGS_NAMESPACE], () => {
+            if (seated) return noop
+            const servedScope = nativeForm()
+            return servedScope !== undefined ? seatRow(servedScope) : noop
+          })
+          try {
+            if (typeof ctx.effect === 'function') ctx.effect(startWatch, 'dsh-gitbash: settings row watch')
+            else startWatch()
+          } catch {
+            // Leave the row unseated; the user can reload once the settings domain is up.
+          }
+        }
+      })
+    } catch {
+      // Late activation is optional; the row stays unseated rather than breaking the client plugin.
+    }
   }
 }

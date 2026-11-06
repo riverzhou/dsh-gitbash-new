@@ -50,7 +50,7 @@ interface Capability {
   readonly systemPrompt?: SystemPromptLike
 }
 
-/** Read a service without letting a missing/thorowing `get` break the listener. */
+/** Read a service without letting a missing/throwing `get` break the listener. */
 function readService<T>(ctx: { get?(name: string): unknown }, name: string): T | undefined {
   try {
     const value = typeof ctx.get === 'function' ? ctx.get(name) : undefined

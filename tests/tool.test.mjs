@@ -222,6 +222,14 @@ test('presentResult recognizes a promoted result without the tool value', () => 
     isError: false,
   })
   assert.equal(emptyOutput.card, 'generic')
+  const spilled = tool.presentResult({ command: 'sleep 5', description: 'wait' }, {
+    content: [{
+      type: 'text',
+      text: 'partial\n[still running after 1000ms; moved to background job bash-spilled]\n\n(Omitted 1234 bytes. Full formatted result stored at: C:\\tmp\\bash.txt. Use read.)',
+    }],
+    isError: false,
+  })
+  assert.equal(spilled.card, 'generic')
 })
 
 test('an invalid/absent sandbox policy resolution fails closed', async () => {
@@ -278,6 +286,15 @@ test('presentResult recognizes a background result from the tool value alone', (
   const result = tool.presentResult(undefined, {
     content: [{ type: 'text', text: 'started background job bash-abc' }],
     value: { kind: 'background', jobId: 'bash-abc', cwd: 'C:\work' },
+    isError: false,
+  })
+  assert.equal(result.card, 'generic')
+})
+
+test('presentResult recognizes a background result from its acknowledgement text', () => {
+  const tool = createBashTool(runtime())
+  const result = tool.presentResult(undefined, {
+    content: [{ type: 'text', text: 'started background job bash-abc\n[compat: bash runs outside the DSH file sandbox (session mode workspace-write)]' }],
     isError: false,
   })
   assert.equal(result.card, 'generic')

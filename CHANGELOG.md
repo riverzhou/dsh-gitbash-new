@@ -3,6 +3,61 @@
 All notable changes to this project are documented here. One version per
 entry; the Git history is the evidence.
 
+## 0.2.6 — 2026-11-06
+
+Third audit release. No DSH contract change; hardens inherited shell state,
+MSYS2 path inference, client row lifecycle and job/presenter diagnostics.
+
+### Fixed
+
+- **Inherited shell state**: `composeEnv` now tombstones `BASH_ENV`, `ENV`,
+  `BASH_FUNC_*`, `SHELLOPTS`, `BASHOPTS`, `CDPATH`, `GLOBIGNORE`,
+  `POSIXLY_CORRECT`, `BASH_COMPAT`, `BASH_XTRACEFD`, `PS4`, `PROMPT_COMMAND`
+  and `IFS`. A host shell can no longer inject a startup script or exported
+  function into every `bash -c`. Verified end-to-end by starting DSH with a
+  hostile `BASH_ENV` and `BASH_FUNC_evil`; the child reported `BASH_ENV=UNSET`,
+  `CLEAN`, `FUNC_GONE`, and no marker file was created.
+- **MSYS2 environment-bin paths**: a manual `<root>\<env>\bin\bash.exe` now
+  infers that environment when `msystem=auto`; an explicit mismatching
+  `msystem` is rejected. Previously a UCRT64 binary could run with MINGW64's
+  `MSYSTEM`/PATH.
+- **Client row lifecycle**: the `whileServed` callback now returns the slot
+  disposer (the official contract), and `seatRow` returns a release function
+  owned by `ctx.effect`; the row unregisters when the namespace disappears and
+  can be seated again. Late `inject` callbacks and form snapshots are guarded.
+- **Stale candidates**: a successful `/state` with an empty `candidates` list
+  now clears the old list instead of leaving uninstalled profiles in the Shell
+  dropdown. `recommended` is cleared the same way.
+- **Provider failure after spawn** is reported as a failed job with the provider
+  message, not a bare `killed`; `BashExecution.failure` exposes it.
+- **Presenter fallbacks**: background results are recognized from their
+  acknowledgement text when the tool value is absent; promoted markers are
+  recognized even when a DSH spill-policy footer follows them.
+- **Getter/service hardening**: a throwing `shell.sandboxMode` getter cannot
+  break tool creation; store snapshots/subscriptions and client late injection
+  are guarded.
+- **Single source**: `COMPAT_MODES` moved to `shared/protocol.ts`; the row
+  renders its options from it. Dead `state.applied`/`agents` fields removed.
+
+### Tests
+
+- 97 tests (up from 95): inherited shell env clearing, MSYS2 env-bin inference
+  and mismatch rejection, provider failure → failed outcome, background
+  acknowledgement presenter fallback, promoted marker with spill footer.
+- Live on DSH `0.2.2-rc.1`: real Chromium read-only refusal; approval allow/deny;
+  workspace-write escalation labeling; 108,894-byte output spill with tail and
+  truncation notice; live `job_kill`; `/tmp` workdir; hostile `BASH_ENV`
+  clearing; final clean settings row (3 selects, no console errors). See
+  `docs/SMOKE.md`.
+- 0.2.4's 31/31 scenario + 15/15 UI checks and 0.2.5's 13/13 manual-path flow
+  remain part of the evidence.
+
+### Not covered
+
+- The 0.2.2 restricted-token MSYS2 experiment was not re-run; DESIGN §2.1 is a
+  source-level review.
+- No local Cygwin installation; Cygwin paths are unit/logic-covered only.
+
 ## 0.2.5 — 2026-11-06
 
 Second audit release. No DSH contract change; hardens path/UI/provider edges

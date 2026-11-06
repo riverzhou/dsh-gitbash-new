@@ -50,8 +50,11 @@ export function stripMatchingQuotes(value: string): string {
   return trimmed
 }
 
+/** Supported compatibility modes. */
+export const COMPAT_MODES = ['auto', 'strict'] as const
+
 /** Sandbox behavior under a constrained session. */
-export type CompatMode = 'auto' | 'strict'
+export type CompatMode = typeof COMPAT_MODES[number]
 
 /** One selectable shell profile discovered on this machine. */
 export interface BashProfileView {

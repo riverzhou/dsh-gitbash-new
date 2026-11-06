@@ -328,13 +328,15 @@ function presentResult(args: unknown, result: ToolResultLike): ToolResultViewLik
   const raw = block.text
   const record = typeof args === 'object' && args !== null ? args as Record<string, unknown> : {}
   const kind = (result.value as { kind?: unknown } | undefined)?.kind
-  const isBackground = record.run_in_background === true || kind === 'background'
+  const isBackground = record.run_in_background === true
+    || kind === 'background'
+    || /^started background job [^\n]+(?:\n|$)/.test(raw)
   const isPromoted = kind === 'promoted'
     // DSH 0.2.2's ToolResult carries `content`/`isError`/`meta`, not the tool
     // value, so an external bridge may not receive `value`. Recognize the
     // promoted marker as a fallback; otherwise a running job would be shown as
     // a terminal card with a bogus exit-0 pill.
-    || /(?:^|\n)\[still running after \d+ms; moved to background job [^\]\n]+\]$/.test(raw)
+    || /(?:^|\n)\[still running after \d+ms; moved to background job [^\]\n]+\]/.test(raw)
   if (isBackground || isPromoted || result.isError === true) {
     const view: GenericResultViewLike = {
       card: 'generic',
@@ -358,7 +360,15 @@ export function createBashTool(runtime: BashToolRuntime): ToolDefinitionLike {
     && typeof runtime.jobs?.read === 'function'
     && typeof runtime.jobs?.kill === 'function'
     && typeof runtime.jobs?.remove === 'function'
-  const escalationModes: readonly SandboxMode[] = runtime.shell?.sandboxMode !== undefined && runtime.sandboxPolicy !== undefined
+  let shellMode: string | undefined
+  try {
+    shellMode = runtime.shell?.sandboxMode
+  } catch {
+    // A shell executor whose capability getter throws cannot advertise
+    // escalation; the policy service still decides every call.
+    shellMode = undefined
+  }
+  const escalationModes: readonly SandboxMode[] = shellMode !== undefined && runtime.sandboxPolicy !== undefined
     ? ESCALATION_TARGETS
     : []
   const description = bashDescription(runtime, backgroundEnabled, promote, escalationModes.length > 0)

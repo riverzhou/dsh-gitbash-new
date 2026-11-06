@@ -239,7 +239,7 @@ interface BashProfile {
 ```
 
 - **Git for Windows**：一个安装 = 一个 profile，`msystem='MINGW64'`，`path` 固定用 `<root>\usr\bin\bash.exe`。用户填 `<root>\bin\bash.exe` 时自动归一化到 `usr\bin`（Git 2.56 的 `bin` launcher 会把 `MSYSTEM` 重置为 UCRT64，必须绕开）。
-- **MSYS2**：一个安装可枚举多个 profile（每个环境一个）：`UCRT64`、`MINGW64`、`CLANG64`、`CLANGARM64`、`MINGW32`、`MSYS`；`path` 都是 `<root>\usr\bin\bash.exe`，但 `msystem` 与 `environmentRoot` 不同。**两个 MSYS2 环境共用同一个 bash.exe，所以 `bashPath` 单独不足以区分，必须同时持久化 `msystem`。**
+- **MSYS2**：一个安装可枚举多个 profile（每个环境一个）：`UCRT64`、`MINGW64`、`CLANG64`、`CLANGARM64`、`MINGW32`、`MSYS`；自动发现时 `path` 都是 `<root>\usr\bin\bash.exe`，但 `msystem` 与 `environmentRoot` 不同。**两个 MSYS2 环境共用同一个 bash.exe，所以 `bashPath` 单独不足以区分，必须同时持久化 `msystem`。** 手填的 `<root>\<env>\bin\bash.exe` 会推断所属环境（`auto`）或拒绝不匹配的显式 `msystem`。
 - **Cygwin**：best-effort，`flavor='cygwin'`，无 `MSYSTEM`；默认排在 Git/MSYS2 之后，UI 标注 experimental。
 
 ### 5.2 候选来源（按优先级）
@@ -264,7 +264,9 @@ interface BashProfile {
 
 ### 5.4 版本探测（只在“自动发现”/“测试”时）
 
-- `spawnSync(path, ['--version'], { timeout: 2000, windowsHide: true })`。
+- `spawnSync(path, ['--version'], { timeout: 2000, windowsHide: true, env: {} })`。
+- 空环境：发现可能执行 PATH 上的任意 `bash.exe`，不能把宿主凭据/令牌交给它；
+  Git 5.3.15 与 MSYS2 5.3.20 实测空环境即可输出。
 - 成功输出匹配 `GNU bash, version X.Y.Z...`；记录版本。
 - Git/MSYS2 的 `bash --version` 都写 `x86_64-pc-cygwin`，**不能靠版本字符串区分 flavor**；flavor 由安装 marker 判定。
 - 失败 → 候选标记 `valid:false` + 原因；不阻断其它候选。
@@ -275,6 +277,7 @@ interface BashProfile {
 - 绝对 POSIX 盘符路径 `/c/...`、`/d/...`、`/cygdrive/c/...` → 转 Windows `C:\...`（作为 spawn cwd / meta.cwd）。
 - 相对路径 → `path.resolve(sessionCwd, workdir)`。
 - `/tmp` → `os.tmpdir()`；其它非盘符绝对 POSIX 路径（`/home/...`）→ 明确报错，要求 Windows 路径（避免猜错 MSYS 映射）。
+- 盘符相对路径 `C:foo` / `C:` 拒绝：Node 会按宿主当前盘 cwd 解析，可能跑到工作区外。
 - `pwd` 在 bash 里仍是 `/d/...`；模型看到 POSIX，`meta.cwd` 是 Windows 绝对路径（Web UI 要求）。
 
 ### 5.6 环境（按 profile 区分）
@@ -288,8 +291,15 @@ interface BashProfile {
   bash 在 cwd 匹配时会信任它，导致 `$PWD`/`pwd` 变成 `D:/...`。`composeEnv`
   用显式 `undefined` tombstone 让 subprocess 服务删除这两个环境项，由 bash 从真实
   cwd 推导 POSIX 路径。
+- **清除继承的 shell 启动/函数/选项状态**：`BASH_ENV`（每次 `bash -c` 前 source）、
+  `ENV`、`BASH_FUNC_*`（导入函数可覆盖命令）、`SHELLOPTS`、`BASHOPTS`、
+  `CDPATH`、`GLOBIGNORE`、`POSIXLY_CORRECT`、`BASH_COMPAT`、`BASH_XTRACEFD`、
+  `PS4`、`PROMPT_COMMAND`、`IFS` 全部 tombstone。真机以恶意 `BASH_ENV` +
+  导出函数启动 DSH，子命令仍为 `BASH_ENV=UNSET` / `CLEAN` / `FUNC_GONE`。
 - 不覆盖 `HOME`、`TMP`、`TEMP`、`LANG`（尊重用户 dotfiles 与区域设置）。
 - 若 `msystem` 与 path 的 flavor 不匹配（例如 Git 配 `UCRT64`），**拒绝执行**并提示重新选择，而不是猜。
+- 手填 MSYS2 的 `<root>\<env>\bin\bash.exe` 时：`msystem=auto` 采用路径所属
+  环境；显式 `msystem` 不匹配则拒绝，避免二进制与环境变量/PATH 错配。
 
 ### 5.7 选择与持久化
 
@@ -378,13 +388,14 @@ interface BashProfile {
 ## 8. 测试
 
 - **单元**（`node:test`，无 DSH）：
-  - 发现：Git/MSYS2 flavor 识别、MSYS2 环境枚举（UCRT64/MINGW64/…）、WSL 排除、去重、版本解析。
+  - 发现：Git/MSYS2 flavor 识别、MSYS2 环境枚举（UCRT64/MINGW64/…）、WSL 排除、去重、版本解析、MSYS2 环境 bin 路径推断/显式不匹配拒绝。
   - 路径：POSIX↔Windows、`/tmp`、相对路径、非法绝对 POSIX、盘符相对 `workdir`（`C:foo`/`C:`）拒绝。
-  - 环境：Git 的 `MSYSTEM=MINGW64`、MSYS2 的 `MSYSTEM=<env>` 与三段 PATH、`msystem`/flavor 不匹配拒绝、Cygwin 的 `MSYSTEM`/`MSYS2_PATH_TYPE` tombstone。
+  - 环境：Git 的 `MSYSTEM=MINGW64`、MSYS2 的 `MSYSTEM=<env>` 与三段 PATH、`msystem`/flavor 不匹配拒绝、Cygwin 的 `MSYSTEM`/`MSYS2_PATH_TYPE` tombstone、`BASH_ENV`/`BASH_FUNC_*`/`IFS` 等继承 shell 状态清除。
   - 渲染：stdout/stderr 合并、截断、退出码/信号/超时/停止/兼容标记、parseExitStatus。
   - 提权：参数配对、严格更宽、approval outcome 映射、8 语言 `displayReason`（en/zh/ja/es/fr/de/ru/pt）、read-only 下批准 `danger-full-access`。
   - 设置：默认值、volatile 读取、无效路径、相对 `bashPath` 拒绝、抛异常的 volatile getter 回退默认值。
-  - 工具定义：参数/输出 schema 形状、presenter 返回值、promote 文本（无交接句）、前台 job settle 后移除、无 `value` 时的 promoted/background presenter 兜底。
+  - 执行器：provider 失败映射为 job `failed`，而不是裸 `killed`。
+  - 工具定义：参数/输出 schema 形状、presenter 返回值、promote 文本（无交接句）、前台 job settle 后移除、无 `value` 时的 promoted/background presenter 兜底（含 DSH spill footer）。
   - 替换：缺 `subprocess`/`sandboxPolicy` 时保留 pwsh；能力探测返回缺失原因。
   - 路由：`ctx.get` 抛异常时不阻塞插件加载。
   - 打包：`dsh.bundle.platforms`、`engines.dsh`/`engines.node` 下限、patch 平台闸。
@@ -398,14 +409,15 @@ interface BashProfile {
   2026-10-18 在 DSH 0.2.1-rc.2、2026-11-06 在 DSH 0.2.2-rc.1 上跑通：插件加载、
   `/api` state、`agent/created` 替换、模型工具目录只有 `bash`、真实 bash 调用、
   promote / 后台 / 子智能体与设置行；0.2.4 审计轮 31/31 场景 + 15/15 UI 检查，
-  0.2.5 审计轮 13/13 手动路径 UI 流程。详见 [SMOKE.md](SMOKE.md)。
+  0.2.5 审计轮 13/13 手动路径 UI 流程，0.2.6 审计轮 read-only/审批/大输出/
+  job kill/恶意环境清除与干净最终设置行。详见 [SMOKE.md](SMOKE.md)。
 - 不使用 `lib/` 旧构建做验证（checkout 里可能 stale）；以 `src` + 部署运行时为准。
 
 ---
 
 ## 9. 打包与安装
 
-- npm 包名：`@riverzh/dsh-gitbash`（DSH entry id 仍是 `dsh-gitbash`）；`0.1.0` 是内部实现基线，`0.2.0` 是首个公开发布版本，`0.2.1` 为审计修复版，`0.2.2` 修复 Windows 信号/`PWD` 与设置页浅深色，`0.2.3` 同步 DSH 0.2.2 契约，`0.2.4`/`0.2.5` 为两轮审计修复版；License 为 `GPL-3.0-only`。
+- npm 包名：`@riverzh/dsh-gitbash`（DSH entry id 仍是 `dsh-gitbash`）；`0.1.0` 是内部实现基线，`0.2.0` 是首个公开发布版本，`0.2.1` 为审计修复版，`0.2.2` 修复 Windows 信号/`PWD` 与设置页浅深色，`0.2.3` 同步 DSH 0.2.2 契约，`0.2.4`/`0.2.5`/`0.2.6` 为三轮审计修复版；License 为 `GPL-3.0-only`。
 - `package.json`：
   - `"type":"module"`，`main: "lib/index.js"`，`exports: { ".": ..., "./client": ... }`。
   - `"dsh": { "bundle": { "platforms": ["win32"], "patch": "./cordis.patch.yml" }, "client": { "platform": "web" } }`。
@@ -525,3 +537,23 @@ interface BashProfile {
 | 单测新增 | ✅ presenter 无 `value` 兜底（promoted/background）、盘符相对、Cygwin msystem 拒绝、抛异常 getter、抛异常 `ctx.get` |
 
 未覆盖：read-only 实机点击、提权审批弹窗、0.2.2 受限令牌启动 MSYS2 重跑。
+
+### 12.5 2026-11-06，0.2.6 第三轮审计（DSH `0.2.2-rc.1`）
+
+同一台机器、独立 profile `gitbash-r3`（`link:` 当前仓库，端口 `56128`）：
+
+| 项 | 结果 |
+|---|---|
+| 单测 / 自测 / 契约 | ✅ 97/97、selftest 10/10、compatcheck 8 组、`pnpm audit --prod` 干净 |
+| read-only 拒绝 | ✅ 真实 Chromium 会话；bash 返回 `bash cannot run in a read-only session…`，`READONLY_SHOULD_NOT_RUN` 未执行 |
+| 提权允许 | ✅ read-only → `danger-full-access` 审批；`echo ESCALATION_APPROVED` 成功，结果无 compat（真实 danger） |
+| 提权拒绝 | ✅ 拒绝后命令未执行，模型收到“user rejected…” |
+| workspace-write 提权 | ✅ read-only → `workspace-write` 审批通过后命令成功，结果带 `[compat: … (session mode workspace-write)]` |
+| 大输出 | ✅ `seq 1 20000`：108,894 字节 spill 文件完整；模型结果保留尾部 `20000` + `[output truncated; full output: …]` |
+| `job_kill` | ✅ 后台 `sleep 30` 被 kill，`job_output` 返回 `[status: killed, killed before exit; audit kill]` |
+| `/tmp` workdir | ✅ `pwd=/tmp`、`TEMP=/tmp` |
+| 恶意宿主 shell 环境 | ✅ 以 `BASH_ENV` + `BASH_FUNC_evil` 启动 DSH；子命令 `BASH_ENV=UNSET` / `CLEAN` / `FUNC_GONE`，marker 未生成 |
+| 最终设置行 | ✅ 全新 Chromium profile：行存在、3 个下拉、无 console 错误（旧复用页面的 DSH session/HMR 噪声不计入插件） |
+| 新增单测 | ✅ 环境清除、MSYS2 环境 bin 推断/拒绝、provider failure→failed、presenter 文本兜底、COMPAT 单一来源 |
+
+未覆盖：0.2.2 受限令牌启动 MSYS2 重跑；Cygwin 无本机安装，仅单测/路径逻辑覆盖。

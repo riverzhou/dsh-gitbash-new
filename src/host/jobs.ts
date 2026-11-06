@@ -26,6 +26,9 @@ export function processOutcome(proc: BashExecution): JobOutcomeLike {
   if (proc.startupFailure !== undefined) {
     return { status: 'failed', detail: `bash startup failed: ${proc.startupFailure}` }
   }
+  if (proc.failure !== undefined) {
+    return { status: 'failed', detail: proc.failure }
+  }
   if (proc.status === 'killed') {
     return { status: 'killed', detail: proc.signal !== null ? `signal: ${proc.signal}` : 'killed before exit' }
   }

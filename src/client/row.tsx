@@ -17,7 +17,7 @@ import {
 } from 'react'
 import { createRowController, type RowConfig } from './store.ts'
 import type { SettingsScopeLike, Translate } from './types.ts'
-import { MSYSTEM_SETTINGS } from '../shared/protocol.ts'
+import { COMPAT_MODES, MSYSTEM_SETTINGS } from '../shared/protocol.ts'
 import type { BashProfileView, MsystemSetting } from '../shared/protocol.ts'
 
 export interface TerminalToolRowProps {
@@ -228,8 +228,11 @@ export function TerminalToolRow({ t, scope }: TerminalToolRowProps): ReactElemen
           disabled={!state.writable || state.saving}
           onChange={event => void controller.setConfig({ compat: event.target.value as RowConfig['compat'] })}
         >
-          <option value="auto" style={styles.option}>{t('compatAuto')}</option>
-          <option value="strict" style={styles.option}>{t('compatStrict')}</option>
+          {COMPAT_MODES.map(mode => (
+            <option key={mode} value={mode} style={styles.option}>
+              {t(mode === 'auto' ? 'compatAuto' : 'compatStrict')}
+            </option>
+          ))}
         </select>
       </div>
 

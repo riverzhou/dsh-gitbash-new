@@ -94,9 +94,11 @@ export function composePath(
       || key.includes('\\cygwin\\') || key.includes('\\cygwin64\\') || key.includes('\\cygwin32\\')
       || key.endsWith('\\cygwin') || key.endsWith('\\cygwin64') || key.endsWith('\\cygwin32')
     )
+    const programFilesGit = key.includes('\\program files\\git\\')
+      || key.includes('\\program files (x86)\\git\\')
     if (profile.flavor === 'git' && msysRoot) return
-    if (profile.flavor === 'msys2' && key.includes('\\program files\\git\\')) return
-    if (profile.flavor === 'cygwin' && (msysRoot || key.includes('\\program files\\git\\'))) return
+    if (profile.flavor === 'msys2' && programFilesGit) return
+    if (profile.flavor === 'cygwin' && (msysRoot || programFilesGit)) return
     // Keep only this MSYS2 environment's own bin dirs; drop sibling envs.
     if (profile.flavor === 'msys2' && underRoot(trimmed, profile.root) && ![...selected].some(prefix => key === prefix)) return
     seen.add(key)
@@ -132,6 +134,29 @@ export function composeEnv(
     OLDPWD: undefined,
     MSYSTEM: undefined,
     MSYS2_PATH_TYPE: undefined,
+    // A host shell may export startup/option variables that silently change
+    // every `bash -c`: BASH_ENV is sourced before the command, PS4/CDPATH/
+    // GLOBIGNORE alter shell semantics, and POSIXLY_CORRECT/BASH_COMPAT switch
+    // modes. The plugin owns the shell environment, so clear them.
+    BASH_ENV: undefined,
+    ENV: undefined,
+    CDPATH: undefined,
+    GLOBIGNORE: undefined,
+    POSIXLY_CORRECT: undefined,
+    SHELLOPTS: undefined,
+    BASHOPTS: undefined,
+    BASH_COMPAT: undefined,
+    BASH_XTRACEFD: undefined,
+    PS4: undefined,
+    PROMPT_COMMAND: undefined,
+    IFS: undefined,
+  }
+  // Exported bash functions are imported from `BASH_FUNC_*` entries and can
+  // override every command in the child shell. The host environment may carry
+  // them; remove each inherited name explicitly (the subprocess service merges
+  // the scrubbed parent beneath this map).
+  for (const key of Object.keys(inherited)) {
+    if (/^BASH_FUNC_/i.test(key)) env[key] = undefined
   }
   if (profile.flavor === 'git') {
     env.MSYSTEM = 'MINGW64'

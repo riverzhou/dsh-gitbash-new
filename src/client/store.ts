@@ -101,12 +101,20 @@ export interface RowController {
 
 /** Create the controller. */
 export function createRowController(scope: SettingsScopeLike<RowConfig> | undefined): RowController {
+  const snapshotOf = () => {
+    try {
+      return scope?.getSnapshot()
+    } catch {
+      return undefined
+    }
+  }
+  const initial = snapshotOf()
   const store = createStore<RowState>({
     status: 'loading',
-    scopeStatus: scope?.getSnapshot().status ?? 'unavailable',
-    writable: scope?.getSnapshot().writable ?? false,
+    scopeStatus: initial?.status ?? 'unavailable',
+    writable: initial?.writable ?? false,
     platform: '',
-    config: configOf(scope?.getSnapshot().value),
+    config: configOf(initial?.value),
     capability: DEFAULT_CAPABILITY,
     candidates: [],
     discovered: false,
@@ -117,7 +125,7 @@ export function createRowController(scope: SettingsScopeLike<RowConfig> | undefi
   let disposed = false
 
   const applyState = (state: StateView): void => {
-    const snapshot = scope?.getSnapshot()
+    const snapshot = snapshotOf()
     store.setState({
       status: 'ready',
       scopeStatus: snapshot?.status ?? 'unavailable',
@@ -130,8 +138,8 @@ export function createRowController(scope: SettingsScopeLike<RowConfig> | undefi
       },
       ...(state.effective !== undefined ? { effective: state.effective } : { effective: undefined }),
       ...(state.problem !== undefined ? { problem: state.problem } : { problem: undefined }),
-      candidates: state.candidates.length > 0 ? state.candidates : store.getState().candidates,
-      ...(state.recommended !== undefined ? { recommended: state.recommended } : {}),
+      candidates: state.candidates,
+      ...(state.recommended !== undefined ? { recommended: state.recommended } : { recommended: undefined }),
       discovered: true,
       error: undefined,
       capability: state.capability,
@@ -155,7 +163,8 @@ export function createRowController(scope: SettingsScopeLike<RowConfig> | undefi
     const unsubscribers: (() => void)[] = []
     if (scope !== undefined) {
       const sync = (): void => {
-        const snapshot = scope.getSnapshot()
+        const snapshot = snapshotOf()
+        if (snapshot === undefined) return
         store.setState({
           scopeStatus: snapshot.status,
           writable: snapshot.writable,
@@ -163,7 +172,11 @@ export function createRowController(scope: SettingsScopeLike<RowConfig> | undefi
         })
       }
       sync()
-      unsubscribers.push(scope.subscribe(sync))
+      try {
+        unsubscribers.push(scope.subscribe(sync))
+      } catch {
+        // A disposed/early form still renders the fetched state; live mirroring is optional.
+      }
     }
     void refresh()
     return () => {

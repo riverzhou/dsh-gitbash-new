@@ -71,10 +71,7 @@ export function apply(ctx: HostContextLike, config?: unknown): void {
   }
 
   const cache = createDiscoveryCache()
-  const state: { lastReplace?: ReplaceView | undefined; applied: boolean; agents: number } = {
-    applied: false,
-    agents: 0,
-  }
+  const state: { lastReplace?: ReplaceView | undefined } = {}
   const settingsForSession = () => readSettings(config)
   const initial = settingsForSession()
   diag(`apply: pid=${process.pid} settings=${JSON.stringify({ bashPath: initial.bashPath, msystem: initial.msystem, compat: initial.compat })} log=${diagFile()}`)
@@ -108,14 +105,12 @@ export function apply(ctx: HostContextLike, config?: unknown): void {
     settings: settingsForSession,
     cache,
     onAttempt: (attempt, agent) => {
-      state.agents += 1
       state.lastReplace = {
         at: Date.now(),
         applied: attempt.applied,
         ...attempt.reason !== undefined ? { reason: attempt.reason } : {},
       }
-      if (attempt.applied) state.applied = true
-      else diag(`replace: skipped agent=${agent.id} reason=${attempt.reason ?? 'unknown'}`)
+      if (!attempt.applied) diag(`replace: skipped agent=${agent.id} reason=${attempt.reason ?? 'unknown'}`)
     },
   })
   ctx.effect?.(() => dispose, 'dsh-gitbash: agent/created listener')
@@ -130,6 +125,7 @@ export { Config, readSettings }
 export { discoverBash, createDiscoveryCache, resolveEffectiveProfile, profileFromPath, profilesForRoot, detectFlavor, parseBashVersion, isBlockedBash, deriveRootFromBash, deriveRootFromGit, defaultMsystemFor, environmentRootFor } from './host/discover.ts'
 export { composeEnv, composePath, posixToWindows, resolveWorkdir, ENV_OVERRIDES } from './host/env.ts'
 export { createBashExecution, clampTimeout, normalizeWindowsExit, EXEC_DEFAULTS, BashSpawnError } from './host/executor.ts'
+export { processOutcome } from './host/jobs.ts'
 export { createBashTool } from './host/bash-tool.ts'
 export { renderResult, renderPromoted, parseExitStatus, compatNote } from './host/render.ts'
 export { approveEscalation, escalationDisplayReason, ESCALATION_TARGETS, WIDER_MODES, validateEscalationArgs, sandboxPermissionsDescription, sandboxDenialMarker, escalationHintMarker } from './host/escalation.ts'

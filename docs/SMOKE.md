@@ -1,4 +1,4 @@
-# 真机冒烟记录 — 2026-10-18（0.2.1-rc.2）/ 2026-11-06（0.2.2-rc.1；0.2.4/0.2.5 审计回归）
+# 真机冒烟记录 — 2026-10-18（0.2.1-rc.2）/ 2026-11-06（0.2.2-rc.1；0.2.4/0.2.5/0.2.6 审计回归）
 
 > 目标：在**真实的 DSH** 里验证插件加载、设置路由、per-agent 替换、
 > 模型工具目录、bash 执行与 `meta.cwd`。不是单元测试的替代品；可复跑。
@@ -508,3 +508,33 @@ compatcheck ok
 - `/discover` 用空环境探测：7/7 profile 返回版本（Git 5.3.15、MSYS2 5.3.20）。
 - 单测 95/95；selftest 10/10；compatcheck 8 组。
 - 测试 profile 与临时浏览器目录已在验证后清理。
+
+---
+
+## 0.2.6 第三轮审计回归（2026-11-06）
+
+> 独立 profile `gitbash-r3`（web 模板 + `link:` 当前仓库，端口 `56128`），
+> 真实 Chromium 会话；额外用 `BASH_ENV` + `BASH_FUNC_evil` 启动一次 DSH。
+
+### read-only / 提权 / 拒绝（真实 UI 审批）
+
+| 检查 | 结果 |
+|---|---|
+| read-only 下 bash | ✅ `Error: bash cannot run in a read-only session…`；`READONLY_SHOULD_NOT_RUN` 未执行 |
+| 提权到 danger 并“允许一次” | ✅ `ESCALATION_APPROVED` 成功；真实 danger，无 compat 尾注 |
+| 提权到 danger 并“拒绝” | ✅ 命令未执行；模型收到 `the user rejected escalating…` |
+| 提权到 workspace-write 并允许 | ✅ `WW_APPROVED`，结果带 `[compat: bash runs outside … workspace-write]` |
+
+### 生命周期 / 输出 / 环境
+
+| 检查 | 结果 |
+|---|---|
+| 大输出 | ✅ `seq 1 20000` → 108,894 字节 spill 文件；模型结果保留尾部 `20000` 与 `[output truncated; full output: …]` |
+| job kill | ✅ `sleep 30` 后台 job 被 kill；`job_output` = `[status: killed, killed before exit; audit kill]` |
+| `/tmp` workdir | ✅ `pwd=/tmp`、`TEMP=/tmp` |
+| 恶意 `BASH_ENV` / 导出函数 | ✅ 以 `BASH_ENV` + `BASH_FUNC_evil` 启动 DSH；命令输出 `BASH_ENV=UNSET`、`CLEAN`、`FUNC_GONE`，marker 未生成 |
+| 最终设置行（全新 Chromium） | ✅ 行存在、3 个下拉、无 console 错误；复用旧页面出现的 DSH session/HMR 错误不计入插件 |
+
+- 单测 97/97；selftest 10/10；compatcheck 8 组通过。
+- 未覆盖：0.2.2 受限令牌启动 MSYS2 重跑；Cygwin 无本机安装。
+- 测试 profile / 临时浏览器目录已在验证后清理。
