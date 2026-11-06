@@ -11,7 +11,7 @@
  */
 import { spawnSync } from 'node:child_process'
 import { existsSync, statSync } from 'node:fs'
-import { basename, dirname, join, normalize } from 'node:path'
+import { basename, normalize } from 'node:path'
 import type { BashFlavor, BashProfileView, Msystem, MsystemSetting } from '../shared/protocol.ts'
 import { FLAVOR_LABELS, MSYSTEMS, stripMatchingQuotes } from '../shared/protocol.ts'
 import type { TerminalToolSettings } from './types.ts'
@@ -194,6 +194,9 @@ export function probeBashVersion(path: string, timeoutMs = 2000): { version?: st
       timeout: timeoutMs,
       windowsHide: true,
       encoding: 'utf8',
+      // Discovery may execute an executable found on PATH. Do not hand it the
+      // host's environment (credentials, tokens); `bash --version` needs none.
+      env: {},
     })
     if (result.error !== undefined && result.error !== null) {
       return { problem: result.error.message }
@@ -313,6 +316,9 @@ export function profileFromPath(
     return { profile: makeProfile('git', root, canonicalGitBash(trimmed, root), 'MINGW64', probe) }
   }
   if (flavor === 'cygwin') {
+    if (msystem !== 'auto') {
+      return { problem: `Cygwin does not use MSYSTEM; set msystem to auto, got ${msystem}` }
+    }
     return { profile: makeProfile('cygwin', root, trimmed, undefined, probe) }
   }
   const selected = msystem === 'auto' ? defaultMsystemFor(root) : msystem

@@ -40,7 +40,6 @@ import type {
   JobReadLike,
   JobRegistryLike,
   JobViewLike,
-  ParameterSpecLike,
   SandboxPolicyLike,
   SandboxPolicyServiceLike,
   ShellEnvServiceLike,
@@ -328,8 +327,14 @@ function presentResult(args: unknown, result: ToolResultLike): ToolResultViewLik
   if (block === undefined || block.type !== 'text') return undefined
   const raw = block.text
   const record = typeof args === 'object' && args !== null ? args as Record<string, unknown> : {}
-  const isBackground = record.run_in_background === true
-  const isPromoted = (result.value as { kind?: unknown } | undefined)?.kind === 'promoted'
+  const kind = (result.value as { kind?: unknown } | undefined)?.kind
+  const isBackground = record.run_in_background === true || kind === 'background'
+  const isPromoted = kind === 'promoted'
+    // DSH 0.2.2's ToolResult carries `content`/`isError`/`meta`, not the tool
+    // value, so an external bridge may not receive `value`. Recognize the
+    // promoted marker as a fallback; otherwise a running job would be shown as
+    // a terminal card with a bogus exit-0 pill.
+    || /(?:^|\n)\[still running after \d+ms; moved to background job [^\]\n]+\]$/.test(raw)
   if (isBackground || isPromoted || result.isError === true) {
     const view: GenericResultViewLike = {
       card: 'generic',

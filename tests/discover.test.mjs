@@ -116,3 +116,14 @@ test('profileFromPath rejects flavor/environment mismatches', t => {
   assert.equal(profileFromPath(msysPath, 'MINGW64').profile?.msystem, 'MINGW64')
   assert.ok(profileFromPath(msysPath, 'CLANG64').problem?.includes('CLANG64'))
 })
+
+test('a Cygwin profile rejects an MSYS2 msystem value', t => {
+  const root = tmp('cygwin-mismatch')
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  touch(join(root, 'bin', 'cygwin1.dll'))
+  touch(join(root, 'bin', 'bash.exe'))
+  const path = join(root, 'bin', 'bash.exe')
+  assert.equal(detectFlavor(root), 'cygwin')
+  assert.equal(profileFromPath(path, 'auto').profile?.flavor, 'cygwin')
+  assert.match(profileFromPath(path, 'UCRT64').problem, /does not use MSYSTEM/)
+})

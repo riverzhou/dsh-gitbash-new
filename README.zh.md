@@ -61,9 +61,9 @@
 - **显式安全**：绝不静默放宽权限——`workspace-write` 下以完全访问运行并在结果里
   标注 `[compat: ...]`，`read-only` 拒绝，`strict` 只允许 `danger-full-access`。
   详见[安全边界](#安全边界先读)。
-- **已验证**：90 个单元/集成用例，加上 DSH `0.2.2-rc.1` 上的 Git 与 MSYS2 真机
+- **已验证**：95 个单元/集成用例，加上 DSH `0.2.2-rc.1` 上的 Git 与 MSYS2 真机
   冒烟（直连、promote、后台、子智能体；0.2.4 审计轮 31/31 场景检查 + 15/15
-  设置页检查，含 strict 实机拒绝）。
+  设置页检查，含 strict 实机拒绝；0.2.5 手动路径 UI 流程 13/13）。
 
 ---
 
@@ -117,7 +117,7 @@ set "DSH_CLI=%LOCALAPPDATA%\Programs\DeepSeek Harness\resources\runtime\cli\bin\
 ### 从 npm 安装（已发布）
 
 ```bat
-%DSH_CLI% plugin --profile desktop add @riverzh/dsh-gitbash@0.2.4
+%DSH_CLI% plugin --profile desktop add @riverzh/dsh-gitbash@0.2.5
 ```
 
 最新版可用 `@riverzh/dsh-gitbash@latest`。
@@ -166,7 +166,7 @@ set "DSH_CLI=%LOCALAPPDATA%\Programs\DeepSeek Harness\resources\runtime\cli\bin\
 
 设置页长这样：
 
-![设置页：终端工具](docs/images/settings-row-0.2.4.png)
+![设置页：终端工具](docs/images/settings-row-0.2.5.png)
 
 Shell、兼容模式和 MSYS2 环境下拉都跟随 DSH 的浅色/深色 surface token，闭控件和
 展开列表都保持可读：
@@ -250,7 +250,8 @@ job 服务与 sandboxing executor，因此都可用；极简组合可能只有�
 - 相对 `workdir`：基于会话 cwd 解析。
 - 接受 Windows 绝对路径（`C:\...`）和 POSIX 盘符路径（`/c/...`、`/d/...`）；
   `/tmp` 映射到 Windows 临时目录。
-- 其它 POSIX 绝对路径（如 `/home/...`）会明确报错，不猜测映射。
+- 其它 POSIX 绝对路径（如 `/home/...`）会明确报错，不猜测映射；`C:foo`、`C:`
+  这类盘符相对路径也会拒绝，请用 `C:\...` 或相对路径。
 - 命令内优先用 POSIX 路径；用 `$VAR` / `${VAR:?}`，不要用 PowerShell 语法。
 
 ### 后台任务
@@ -361,7 +362,9 @@ WSL 一律排除：`System32\bash.exe`、`Sysnative`、`WindowsApps`、`\\wsl$`�
 - **刷新**：重新扫描根目录并探测 `bash --version` 版本/健康状态。
 - **兼容**：兼容模式 / 严格模式；下面一行红字说明当前代价。
 - **高级与诊断**：手动路径、**使用此路径**、**恢复自动**、**测试**、MSYS2
-  环境，以及平台 / 沙箱能力 / 后台任务 / 最近替换。
+  环境，以及平台 / 沙箱能力 / 后台任务 / 最近替换。修改手动路径时会在同一次
+  写入里把 `msystem` 重置为 `auto`，避免新路径被上一次的 MSYS2 环境判定为无效；
+  当前生效 profile 为 Git 时，MSYS2 环境下拉禁用。
 
 右上角徽章显示**当前生效**的 profile；手填的 Git `bin` 路径归一化后，徽章可能
 与输入框不同，这是正常的。
@@ -488,7 +491,8 @@ WSL 一律排除：`System32\bash.exe`、`Sysnative`、`WindowsApps`、`\\wsl$`�
 **2026-11-06 真机验证**：DSH `0.2.2-rc.1`、Git for Windows 2.56、MSYS2
 5.3.20（UCRT64）；直接 bash、promote、后台任务、子智能体、SIGTERM 归一化、
 相对 workdir、strict 拒绝与真实设置行（通过 UI 切到 MSYS2）均已跑过——干净加载
-下 31/31 场景检查 + 15/15 UI 检查。原始事件见 [docs/SMOKE.md](docs/SMOKE.md)。
+下 31/31 场景检查 + 15/15 UI 检查。0.2.5 审计又通过真实 UI 跑了 13/13 手动路径
+流程（MSYS2 → Git）。原始事件见 [docs/SMOKE.md](docs/SMOKE.md)。
 
 ---
 
@@ -498,14 +502,15 @@ WSL 一律排除：`System32\bash.exe`、`Sysnative`、`WindowsApps`、`\\wsl$`�
 pnpm install
 pnpm build        # lib/index.js + lib/client.js
 pnpm check        # tsc --noEmit
-pnpm test         # node:test；90 个用例，含真实 Git/MSYS2（存在时）
+pnpm test         # node:test；95 个用例，含真实 Git/MSYS2（存在时）
 pnpm selftest     # 纯逻辑自测，不需要 DSH
 pnpm compatcheck  # 对已安装 DSH 做契约字符串核对
 ```
 
 真实集成测试会自动发现本机 Git/MSYS2；没有时跳过。覆盖 `MSYSTEM`、PATH 隔离、
 退出码、stderr、真实子 bash、超时、真实 `SIGTERM`/`SIGKILL` 编码、可选的 MSYS2
-工具链，以及 compat 下“工作区外可写”的预期行为。
+工具链，以及 compat 下“工作区外可写”的预期行为。`C:foo` 这类盘符相对 `workdir`
+会被拒绝；请用 `C:\...` 或相对路径。
 
 ### 目录
 

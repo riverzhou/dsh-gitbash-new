@@ -3,6 +3,62 @@
 All notable changes to this project are documented here. One version per
 entry; the Git history is the evidence.
 
+## 0.2.5 — 2026-11-06
+
+Second audit release. No DSH contract change; hardens path/UI/provider edges
+found by a second pass over every source file and the client bundle.
+
+### Fixed
+
+- **Manual path vs. MSYS2 environment**: applying a changed manual path now
+  writes `bashPath` + `msystem: auto` in one `configForms.mutate`. Previously a
+  stale `UCRT64` value made a newly entered Git path invalid (and a stale
+  `MINGW64` did the same for MSYS2). The MSYS2 environment control is disabled
+  while the effective profile is Git.
+- **Drive-relative `workdir`**: `C:foo` / `C:` are rejected. Node resolved them
+  against the host's C: current directory, so the command could run somewhere
+  other than the session workspace.
+- **Cygwin + concrete `msystem`** is rejected with a clear problem instead of
+  silently dropping the setting.
+- **Presenter fallback**: a promoted result is recognized even when the
+  external bridge does not receive the tool `value` (DSH 0.2.2's `ToolResult`
+  has only `content`/`isError`/`meta`); a background result is recognized from
+  `value.kind` or `run_in_background`. This avoids drawing a running job as an
+  exit-0 terminal card.
+- **Discovery probe isolation**: `bash --version` now runs with `env: {}`.
+  Discovery can reach a `bash.exe` found on PATH; it must not receive the DSH
+  host's credentials/tokens.
+- **Provider/early-service robustness**: a throwing volatile config getter
+  falls back to defaults; a throwing `ctx.get` in route registration or client
+  plugin `apply` no longer breaks plugin load; duplicate slot injection after
+  HMR is caught.
+
+### Changed
+
+- `pnpm test` / `pnpm selftest` now build first (`pretest`/`preselftest`), so
+  tests can never pass against a stale `lib/`.
+- `tsconfig` enables `noUnusedLocals` / `noUnusedParameters`; dead imports,
+  `DEFAULT_CONFIG` and the unused duplicate test key are gone.
+- Docs updated for the manual-path behavior, drive-relative `workdir`, probe
+  environment and the second audit record.
+
+### Tests
+
+- 95 tests (up from 90): promoted/background presenter fallbacks, drive-relative
+  `workdir`, Cygwin `msystem` rejection, throwing config getter, throwing
+  `ctx.get`.
+- Live on DSH `0.2.2-rc.1`: 13/13 real settings-page checks (Git → manual MSYS2
+  → manual Git; disabled/enabled environment control), Git/MSYS2 discovery
+  7/7 with the empty probe environment, direct/promote/signal/background API
+  checks, and the new drive-relative rejection. See `docs/SMOKE.md`.
+
+### Not covered
+
+- `read-only` real-UI click and the escalation approval dialog remain
+  unit-covered.
+- The 0.2.2 restricted-token MSYS2 experiment was not re-run; DESIGN §2.1 is a
+  source-level review.
+
 ## 0.2.4 — 2026-11-06
 
 Audit release on top of the published `0.2.3`. No DSH contract drift; the

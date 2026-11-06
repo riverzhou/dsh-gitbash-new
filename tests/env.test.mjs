@@ -37,6 +37,8 @@ test('resolveWorkdir accepts Windows, POSIX-drive, relative, and rejects unmappe
   assert.equal(resolveWorkdir(`"${root}"`, undefined), root)
   assert.equal(resolveWorkdir(`'${root}'`, undefined), root)
   assert.throws(() => resolveWorkdir('/home/river', root), /absolute POSIX path/)
+  assert.throws(() => resolveWorkdir('C:foo', root), /drive-relative/)
+  assert.throws(() => resolveWorkdir('C:', root), /drive-relative/)
   assert.throws(() => resolveWorkdir(join(root, 'missing'), root), /does not exist/)
 })
 

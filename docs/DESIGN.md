@@ -338,9 +338,12 @@ interface BashProfile {
   深色主题会出现白底白字；浅色/深色真机截图见 `docs/SMOKE.md`。
 - `/state` 在配置路径无效时返回 `problem`，row 在壳选择下方直接显示，不再只显示“noPath”。
 - 路径 + `msystem` 通过一次 `configForms.mutate` 原子写入，避免中间态。
+- 手动路径变化时，同一次写入把 `msystem` 复位为 `auto`：路径可能切换 Git/MSYS2
+  家族，否则旧的 UCRT64 会把新 Git 路径判为无效（反之亦然）。生效 profile 为 Git
+  时 MSYS2 环境下拉禁用。
 - 真机 UI 已验证：Shell 下拉切 Git → `/state` 读回 `git|...|MINGW64`；切回 MSYS2
-  UCRT64 读回一致；0.2.2 上再验一次 UI 写入。截图见
-  `docs/images/settings-row-0.2.4.png`。
+  UCRT64 读回一致；0.2.2 上再验一次 UI 写入；0.2.5 手动路径 MSYS2 → Git 13/13。
+  截图见 `docs/images/settings-row-0.2.5.png`。
 - 结果文本使用短标记 `[compat: bash runs outside the DSH file sandbox (session mode …)]`；
   工具描述明确它是**部署提示，不是命令 stderr**。
 
@@ -376,13 +379,14 @@ interface BashProfile {
 
 - **单元**（`node:test`，无 DSH）：
   - 发现：Git/MSYS2 flavor 识别、MSYS2 环境枚举（UCRT64/MINGW64/…）、WSL 排除、去重、版本解析。
-  - 路径：POSIX↔Windows、`/tmp`、相对路径、非法绝对 POSIX。
+  - 路径：POSIX↔Windows、`/tmp`、相对路径、非法绝对 POSIX、盘符相对 `workdir`（`C:foo`/`C:`）拒绝。
   - 环境：Git 的 `MSYSTEM=MINGW64`、MSYS2 的 `MSYSTEM=<env>` 与三段 PATH、`msystem`/flavor 不匹配拒绝、Cygwin 的 `MSYSTEM`/`MSYS2_PATH_TYPE` tombstone。
   - 渲染：stdout/stderr 合并、截断、退出码/信号/超时/停止/兼容标记、parseExitStatus。
   - 提权：参数配对、严格更宽、approval outcome 映射、8 语言 `displayReason`（en/zh/ja/es/fr/de/ru/pt）、read-only 下批准 `danger-full-access`。
-  - 设置：默认值、volatile 读取、无效路径、相对 `bashPath` 拒绝。
-  - 工具定义：参数/输出 schema 形状、presenter 返回值、promote 文本（无交接句）、前台 job settle 后移除。
+  - 设置：默认值、volatile 读取、无效路径、相对 `bashPath` 拒绝、抛异常的 volatile getter 回退默认值。
+  - 工具定义：参数/输出 schema 形状、presenter 返回值、promote 文本（无交接句）、前台 job settle 后移除、无 `value` 时的 promoted/background presenter 兜底。
   - 替换：缺 `subprocess`/`sandboxPolicy` 时保留 pwsh；能力探测返回缺失原因。
+  - 路由：`ctx.get` 抛异常时不阻塞插件加载。
   - 打包：`dsh.bundle.platforms`、`engines.dsh`/`engines.node` 下限、patch 平台闸。
 - **集成**（无 DSH 进程）：用真实 bash 跑 `executor`，**Git 与 MSYS2 各跑一遍**：
   - `echo`、`pwd`、`exit 3`、stderr、超时、真实 `SIGTERM` / `SIGKILL` 编码、工作区外写入（compat 预期）。
@@ -393,15 +397,15 @@ interface BashProfile {
 - **真机冒烟**（新 DSH 会话）：按 AGENTS §1 的 ①~⑥ 逐条；记录命令与结果。
   2026-10-18 在 DSH 0.2.1-rc.2、2026-11-06 在 DSH 0.2.2-rc.1 上跑通：插件加载、
   `/api` state、`agent/created` 替换、模型工具目录只有 `bash`、真实 bash 调用、
-  promote / 后台 / 子智能体与设置行；0.2.4 审计轮 31/31 场景 + 15/15 UI 检查。
-  详见 [SMOKE.md](SMOKE.md)。
+  promote / 后台 / 子智能体与设置行；0.2.4 审计轮 31/31 场景 + 15/15 UI 检查，
+  0.2.5 审计轮 13/13 手动路径 UI 流程。详见 [SMOKE.md](SMOKE.md)。
 - 不使用 `lib/` 旧构建做验证（checkout 里可能 stale）；以 `src` + 部署运行时为准。
 
 ---
 
 ## 9. 打包与安装
 
-- npm 包名：`@riverzh/dsh-gitbash`（DSH entry id 仍是 `dsh-gitbash`）；`0.1.0` 是内部实现基线，`0.2.0` 是首个公开发布版本，`0.2.1` 为审计修复版，`0.2.2` 修复 Windows 信号/`PWD` 与设置页浅深色，`0.2.3` 同步 DSH 0.2.2 契约，`0.2.4` 为 0.2.3 的审计修复版；License 为 `GPL-3.0-only`。
+- npm 包名：`@riverzh/dsh-gitbash`（DSH entry id 仍是 `dsh-gitbash`）；`0.1.0` 是内部实现基线，`0.2.0` 是首个公开发布版本，`0.2.1` 为审计修复版，`0.2.2` 修复 Windows 信号/`PWD` 与设置页浅深色，`0.2.3` 同步 DSH 0.2.2 契约，`0.2.4`/`0.2.5` 为两轮审计修复版；License 为 `GPL-3.0-only`。
 - `package.json`：
   - `"type":"module"`，`main: "lib/index.js"`，`exports: { ".": ..., "./client": ... }`。
   - `"dsh": { "bundle": { "platforms": ["win32"], "patch": "./cordis.patch.yml" }, "client": { "platform": "web" } }`。
@@ -506,3 +510,18 @@ interface BashProfile {
 
 未覆盖：read-only 的实机点击与提权审批弹窗（单测覆盖）、受限令牌启动 MSYS2 的
 0.2.2 重跑。
+
+### 12.4 2026-11-06，0.2.5 第二轮审计（DSH `0.2.2-rc.1`）
+
+独立 profile `gitbash-r2`（web 模板 + `link:`，端口 `56126`）：
+
+| 项 | 结果 |
+|---|---|
+| 单测 / 自测 / 契约 | ✅ 95/95、selftest 10/10、compatcheck 8 组 |
+| 手动路径 UI（真实 Chromium） | ✅ 13/13：Git 时 MSYS2 下拉禁用；输入 MSYS2 路径 → `msystem` 自动复位 `auto`、生效 MSYS2、下拉启用；再输入 Git 路径 → 复位 auto、生效 Git、下拉禁用；无 console/网络错误 |
+| API 场景 | ✅ Git 直连（`R2_OK`/`MINGW64`）、promote 新文本、SIGTERM、后台 + `job_output` |
+| 盘符相对 workdir | ✅ 模型传 `workdir:"C:foo"` → `workdir "C:foo" is drive-relative…`，未执行 |
+| 发现探测 | ✅ 空环境探测 7/7 版本（Git 5.3.15；MSYS2 5.3.20） |
+| 单测新增 | ✅ presenter 无 `value` 兜底（promoted/background）、盘符相对、Cygwin msystem 拒绝、抛异常 getter、抛异常 `ctx.get` |
+
+未覆盖：read-only 实机点击、提权审批弹窗、0.2.2 受限令牌启动 MSYS2 重跑。

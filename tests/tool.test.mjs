@@ -57,7 +57,6 @@ function runtime(overrides = {}) {
     shellEnv: { collect: () => ({ DSH_HOME: 'C:\\Users\\River\\.dsh' }) },
     workingDirectory: { ensure: async () => process.cwd() },
     ...overrides,
-    subprocess,
   }
 }
 
@@ -207,6 +206,24 @@ test('presentCall and presentResult keep the terminal card contract', () => {
   assert.equal(result.exitCode, 2)
 })
 
+test('presentResult recognizes a promoted result without the tool value', () => {
+  const tool = createBashTool(runtime())
+  const result = tool.presentResult({ command: 'sleep 5', description: 'wait' }, {
+    content: [{
+      type: 'text',
+      text: 'partial\n[still running after 1000ms; moved to background job bash-0123456789abcdef]',
+    }],
+    isError: false,
+  })
+  assert.equal(result.card, 'generic')
+  assert.equal(result.content[0].text.includes('still running after'), true)
+  const emptyOutput = tool.presentResult({ command: 'sleep 5', description: 'wait' }, {
+    content: [{ type: 'text', text: '[still running after 1000ms; moved to background job bash-empty]' }],
+    isError: false,
+  })
+  assert.equal(emptyOutput.card, 'generic')
+})
+
 test('an invalid/absent sandbox policy resolution fails closed', async () => {
   const subprocess = createFakeSubprocess({ stdout: 'ran\n' })
   const tool = createBashTool(runtime({ subprocess, sandboxPolicy: { resolve: () => undefined } }))
@@ -254,4 +271,14 @@ test('a missing sandbox policy service also fails closed', async () => {
     /sandbox policy service is unavailable/,
   )
   assert.equal(subprocess.calls.length, 0)
+})
+
+test('presentResult recognizes a background result from the tool value alone', () => {
+  const tool = createBashTool(runtime())
+  const result = tool.presentResult(undefined, {
+    content: [{ type: 'text', text: 'started background job bash-abc' }],
+    value: { kind: 'background', jobId: 'bash-abc', cwd: 'C:\work' },
+    isError: false,
+  })
+  assert.equal(result.card, 'generic')
 })

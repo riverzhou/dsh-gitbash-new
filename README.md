@@ -70,10 +70,10 @@ usage, the security model, settings, troubleshooting and development.
   runs bash unconfined and labels the result with `[compat: ...]`, `read-only`
   refuses, and `strict` allows only `danger-full-access`. See
   [Security model](#security-model-read-this-first).
-- **Verified**: 90 unit and integration tests, plus real-machine smoke on DSH
+- **Verified**: 95 unit and integration tests, plus real-machine smoke on DSH
   `0.2.2-rc.1` with Git and MSYS2 (direct, promoted, background and subagent
-  calls; 31/31 scenario checks and 15/15 settings-page checks in the 0.2.4
-  audit round, including strict refusal).
+  calls; 0.2.4 audit round 31/31 scenario + 15/15 settings-page checks, and
+  0.2.5's manual-path UI flow 13/13).
 
 ---
 
@@ -127,7 +127,7 @@ Reopen DSH, then hard-refresh the Web UI (`Ctrl+Shift+R`).
 ### From npm (published)
 
 ```bat
-%DSH_CLI% plugin --profile desktop add @riverzh/dsh-gitbash@0.2.4
+%DSH_CLI% plugin --profile desktop add @riverzh/dsh-gitbash@0.2.5
 ```
 
 Use `@riverzh/dsh-gitbash@latest` for the newest release.
@@ -183,7 +183,7 @@ skips because `pwsh` is no longer restrictable. The log contains
 
 The settings row looks like this:
 
-![Settings row: terminal tool](docs/images/settings-row-0.2.4.png)
+![Settings row: terminal tool](docs/images/settings-row-0.2.5.png)
 
 The Shell, Compatibility and MSYS2-environment dropdowns use the DSH light/dark
 surface tokens, so both the closed control and the open list stay readable:
@@ -275,7 +275,8 @@ bash, `pwd` is the MSYS POSIX form (for example `/d/project`).
 - Windows absolute paths (`C:\...`) and POSIX drive paths (`/c/...`, `/d/...`)
   are accepted; `/tmp` maps to the Windows temp directory.
 - Other POSIX absolute paths (for example `/home/...`) are refused rather than
-  guessed, because the Windows mapping is ambiguous.
+  guessed, because the Windows mapping is ambiguous. Drive-relative forms such
+  as `C:foo` or `C:` are refused too; use `C:\...` or a relative path.
 - Prefer POSIX paths inside commands; use `$VAR` and `${VAR:?}` instead of
   PowerShell syntax.
 
@@ -403,7 +404,10 @@ is intentionally small:
   warning explains the current trade-off.
 - **Advanced & diagnostics** — manual path, **Use this path**, **Reset to auto**,
   **Test**, MSYS2 environment, and platform / sandbox mode / background jobs /
-  last replacement.
+  last replacement. Applying a changed manual path resets `msystem` to `auto`
+  in the same write, so a Git path is never validated against a stale MSYS2
+  environment (and vice versa); the MSYS2 environment control is disabled while
+  the effective profile is Git.
 
 The badge at the top right shows the **effective** profile (which may differ
 from a manually entered path after Git canonicalization).
@@ -542,7 +546,8 @@ For a full real-machine transcript, see [docs/SMOKE.md](docs/SMOKE.md).
 5.3.20 (UCRT64); direct bash, promoted results, background jobs, subagents,
 SIGTERM normalization, relative workdir, strict refusal and the real settings
 row (MSYS2 switch through the UI) were exercised — 31/31 scenario checks and
-15/15 UI checks on a clean browser load. Raw events: [docs/SMOKE.md](docs/SMOKE.md).
+15/15 UI checks on a clean browser load. The 0.2.5 audit added a 13/13 manual
+path flow (MSYS2 → Git) through the real UI. Raw events: [docs/SMOKE.md](docs/SMOKE.md).
 
 ---
 
@@ -552,7 +557,7 @@ row (MSYS2 switch through the UI) were exercised — 31/31 scenario checks and
 pnpm install
 pnpm build        # lib/index.js + lib/client.js
 pnpm check        # tsc --noEmit
-pnpm test         # node:test; 90 tests, including real Git/MSYS2 when present
+pnpm test         # node:test; 95 tests, including real Git/MSYS2 when present
 pnpm selftest     # pure-logic checks, no DSH needed
 pnpm compatcheck  # contract-string check against the installed DSH
 ```
@@ -560,7 +565,8 @@ pnpm compatcheck  # contract-string check against the installed DSH
 Real integration tests discover local Git/MSYS2 installations and skip when
 absent. They exercise `MSYSTEM`, PATH isolation, exit codes, stderr, real child
 bash, timeout, real `SIGTERM`/`SIGKILL` encoding, the optional MSYS2 toolchain
-and the expected unconfined write outside the workspace.
+and the expected unconfined write outside the workspace. A drive-relative
+`workdir` (`C:foo`) is rejected; use `C:\...` or a path relative to the cwd.
 
 ### Layout
 

@@ -170,6 +170,18 @@ export function TerminalToolRow({ t, scope }: TerminalToolRowProps): ReactElemen
     if (profile !== undefined) void controller.useProfile(profile)
   }
 
+  /**
+   * Apply the manual path. A changed path may switch families (Git ↔ MSYS2), so
+   * reset `msystem` to `auto` in the same write; otherwise a stale UCRT64 value
+   * would make a newly entered Git path invalid, and vice versa.
+   */
+  const applyManualPath = (): void => {
+    const next = draftPath.trim()
+    void controller.setConfig(next !== state.config.bashPath
+      ? { bashPath: next, msystem: 'auto' }
+      : { bashPath: next })
+  }
+
   return (
     <div style={styles.card}>
       <div style={styles.header}>
@@ -249,10 +261,10 @@ export function TerminalToolRow({ t, scope }: TerminalToolRowProps): ReactElemen
               disabled={!state.writable || state.saving}
               onChange={event => setDraftPath(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === 'Enter') void controller.setConfig({ bashPath: draftPath.trim() })
+                if (event.key === 'Enter') applyManualPath()
               }}
             />
-            <button style={styles.buttonPrimary} disabled={disabled} onClick={() => void controller.setConfig({ bashPath: draftPath.trim() })}>
+            <button style={styles.buttonPrimary} disabled={disabled} onClick={applyManualPath}>
               {t('apply')}
             </button>
             <button style={styles.button} disabled={disabled} onClick={() => void controller.resetAuto()}>
@@ -268,7 +280,7 @@ export function TerminalToolRow({ t, scope }: TerminalToolRowProps): ReactElemen
             <select
               style={styles.select}
               value={state.config.msystem}
-              disabled={!state.writable || state.saving}
+              disabled={!state.writable || state.saving || state.effective?.flavor === 'git'}
               onChange={event => void controller.setConfig({ msystem: event.target.value as MsystemSetting })}
             >
               {MSYSTEM_SETTINGS.map(option => (

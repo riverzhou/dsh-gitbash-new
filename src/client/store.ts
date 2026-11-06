@@ -35,8 +35,6 @@ export interface RowState {
   readonly notice?: string
 }
 
-const DEFAULT_CONFIG: RowConfig = { bashPath: '', msystem: 'auto', compat: 'auto' }
-
 const DEFAULT_CAPABILITY: CapabilityView = {
   supported: false,
   backgroundJobs: false,

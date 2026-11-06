@@ -8,7 +8,7 @@
 import type { BashProfile, DiscoveryCache } from './discover.ts'
 import { profileFromPath, resolveEffectiveProfile } from './discover.ts'
 import type { TerminalToolSettings } from './types.ts'
-import type { ConnectionServiceLike, HostContextLike } from './types.ts'
+import type { ConnectionServiceLike, FetchRouteLike, HostContextLike } from './types.ts'
 import { ROUTE_DISCOVER, ROUTE_STATE, ROUTE_VALIDATE, SETTINGS_NAMESPACE } from '../shared/protocol.ts'
 import type { DiscoverView, StateView, ValidateView } from '../shared/protocol.ts'
 import { diag } from './diag.ts'
@@ -49,8 +49,20 @@ function toView(profile: BashProfile): BashProfile {
 /** Register the three routes. */
 export function registerRoutes(ctx: HostContextLike, deps: RouteDeps): void {
   const attach = (target: HostContextLike): void => {
-    const connection = target.get('connection') as ConnectionServiceLike | undefined
-    const register = connection?.fetch?.register
+    let connection: ConnectionServiceLike | undefined
+    try {
+      connection = target.get('connection') as ConnectionServiceLike | undefined
+    } catch (error) {
+      diag(`routes: ctx.get(connection) failed: ${messageOf(error)}`)
+      return
+    }
+    let register: ((route: FetchRouteLike) => (() => void) | Promise<() => void>) | undefined
+    try {
+      register = connection?.fetch?.register
+    } catch (error) {
+      diag(`routes: connection.fetch failed: ${messageOf(error)}`)
+      return
+    }
     if (connection === undefined || connection === null || typeof register !== 'function') {
       diag('routes: ctx.connection.fetch is not visible')
       return

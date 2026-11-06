@@ -34,3 +34,12 @@ test('quoted YAML paths are unquoted', () => {
   assert.equal(readSettings({ bashPath: '"C:\\Git\\bin\\bash.exe"' }).bashPath, 'C:\\Git\\bin\\bash.exe')
   assert.equal(readSettings({ bashPath: "'C:\\Git\\bin\\bash.exe'" }).bashPath, 'C:\\Git\\bin\\bash.exe')
 })
+
+test('a throwing volatile getter falls back instead of breaking the agent', () => {
+  const settings = readSettings({
+    bashPath: { get() { throw new Error('disposed') } },
+    msystem: { get() { throw new Error('disposed') } },
+    compat: { get() { throw new Error('disposed') } },
+  })
+  assert.deepEqual(settings, { bashPath: '', msystem: 'auto', compat: 'auto' })
+})

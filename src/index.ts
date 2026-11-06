@@ -35,6 +35,13 @@ export function probeDeploymentCapability(ctx: HostContextLike): CapabilityView 
   const supported = process.platform === 'win32'
     && subprocess !== undefined && typeof subprocess.spawn === 'function'
     && sandboxPolicy !== undefined && typeof sandboxPolicy.resolve === 'function'
+  let shellMode: ShellServiceLike['sandboxMode']
+  try {
+    shellMode = shell?.sandboxMode
+  } catch {
+    // A shell executor whose capability getter throws is simply unknown.
+    shellMode = undefined
+  }
   return {
     supported,
     ...(!supported
@@ -46,7 +53,7 @@ export function probeDeploymentCapability(ctx: HostContextLike): CapabilityView 
               : 'this DSH composition is missing ctx.sandboxPolicy',
         }
       : {}),
-    ...shell?.sandboxMode !== undefined ? { shellSandboxMode: shell.sandboxMode } : {},
+    ...shellMode !== undefined ? { shellSandboxMode: shellMode } : {},
     backgroundJobs: jobs !== undefined && typeof jobs.start === 'function',
     bashAvailable: false,
   }

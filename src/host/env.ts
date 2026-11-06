@@ -196,6 +196,11 @@ export function resolveWorkdir(requested: string | undefined, sessionCwd: string
     return assertDirectory(base)
   }
   const value = stripMatchingQuotes(requested)
+  if (/^[a-zA-Z]:/.test(value) && !isWindowsAbsolute(value)) {
+    throw new BashPathError(
+      `workdir ${JSON.stringify(value)} is drive-relative; use an absolute path such as C:\\... or a path relative to the session cwd`,
+    )
+  }
   let windows: string | undefined
   if (isWindowsAbsolute(value)) {
     windows = value

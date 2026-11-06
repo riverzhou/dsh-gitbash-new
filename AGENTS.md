@@ -15,8 +15,8 @@
 | 文件 | 插件源码 + 构建产物 `lib/` + 文档/测试/脚本（见 §3） |
 | 源码 / 技术栈 | TypeScript（host ESM + client bundle）+ esbuild；`lib/` 已构建并入库 |
 | 项目定位 | ✅ **已确定并实现**（见 §1；设计见 `docs/DESIGN.md`） |
-| 版本 / 许可 | `0.2.4` / `GPL-3.0-only` |
-| 验证 | `pnpm test` 90/90；`pnpm selftest` 10/10；`pnpm compatcheck` 通过（运行时 `0.2.2-rc.1`，floor `>=0.2.2-0`）；DSH 0.2.2-rc.1 真机：31/31 场景检查（Git/MSYS2、promote、后台、信号、workdir、子智能体）+ 15/15 设置行 UI 检查；strict 拒绝实测（`docs/SMOKE.md`） |
+| 版本 / 许可 | `0.2.5` / `GPL-3.0-only` |
+| 验证 | `pnpm test` 95/95；`pnpm selftest` 10/10；`pnpm compatcheck` 通过（运行时 `0.2.2-rc.1`，floor `>=0.2.2-0`）；DSH 0.2.2-rc.1 真机：31/31 场景检查（Git/MSYS2、promote、后台、信号、workdir、子智能体）+ 15/15 设置行 UI 检查 + 13/13 手动路径 UI 流程；strict 拒绝实测（`docs/SMOKE.md`） |
 | 平台 | Windows 10（19045）/ Git for Windows 2.56（bash 5.3.15）/ MSYS2 5.3.20（UCRT64） |
 | 运行时 | Node v24.21.0；DSH 桌面运行时 `0.2.2-rc.1` |
 | 已知硬约束 | Git Bash/MSYS2 无法在 DSH Windows ACL 沙箱内启动；兼容模式策略见 §1 与 README |
@@ -116,7 +116,7 @@ dsh-gitbash-new/
 │       └── types.ts       # 客户端契约窄化
 ├── tests/
 │   ├── helpers/           # fake / real subprocess
-│   └── *.test.mjs         # 90 个 node:test 用例（含真实 Git/MSYS2 集成）
+│   └── *.test.mjs         # 95 个 node:test 用例（含真实 Git/MSYS2 集成）
 ├── scripts/
 │   ├── selftest.mjs       # 纯逻辑自测
 │   └── compatcheck.mjs    # 对 app.asar 里的官方产物做契约字符串核对
@@ -231,3 +231,18 @@ dsh-gitbash-new/
     host 与 client 只引用，不再各留一份列表或引号剥离函数。
 23. **client `/api` 错误**：carrier 的 401/权限错误是纯文本，不能直接
     `response.json()`；先读文本、再尝试 JSON，错误信息带状态码与截断正文。
+24. **发现阶段的探测不继承宿主环境**：`probeBashVersion` 用 `env: {}` 执行
+    `bash --version`。PATH/注册表发现出来的可执行文件可能是任意程序，不能把
+    DSH 进程里的凭据/令牌交给它；真机 Git 5.3.15 与 MSYS2 5.3.20 空环境均可。
+25. **`workdir` 拒绝盘符相对路径**：`C:foo` / `C:` 不是会话 cwd 相对路径，
+    也不是绝对路径；`resolveWorkdir` 直接报错，避免按宿主 C: 盘 cwd 解析。
+26. **Presenter 兜底**：0.2.2 的 `ToolResult` 只有 `content/isError/meta`，
+    外部 bridge 可能拿不到 `value`。`presentResult` 必须同时从 `value.kind`
+    和 promote 标记文本识别 promoted，并从 `value.kind`/参数识别 background，
+    否则会把运行中的 job 画成 exit 0 的终端卡片。
+27. **手动路径写入要原子复位 `msystem`**：路径可能切换 Git/MSYS2 家族；
+    设置行在路径变化时同一次 `configForms.mutate` 写 `bashPath` + `msystem:'auto'`，
+    并在生效 profile 为 Git 时禁用 MSYS2 环境下拉。
+28. **测试入口先构建**：`pretest`/`preselftest` 先跑 `build`，避免测试/自测
+    实际加载陈旧 `lib/` 而“假绿”。`tsconfig` 开启 `noUnusedLocals`/
+    `noUnusedParameters`，死代码在 `pnpm check` 阶段即失败。

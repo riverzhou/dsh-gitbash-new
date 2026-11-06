@@ -1,4 +1,4 @@
-# 真机冒烟记录 — 2026-10-18（0.2.1-rc.2）/ 2026-11-06（0.2.2-rc.1；0.2.4 审计回归）
+# 真机冒烟记录 — 2026-10-18（0.2.1-rc.2）/ 2026-11-06（0.2.2-rc.1；0.2.4/0.2.5 审计回归）
 
 > 目标：在**真实的 DSH** 里验证插件加载、设置路由、per-agent 替换、
 > 模型工具目录、bash 执行与 `meta.cwd`。不是单元测试的替代品；可复跑。
@@ -478,3 +478,33 @@ compatcheck ok
 - 单测 90/90；selftest 10/10；compatcheck 8 组通过（含 `tool-pwsh` 替换目标）。
 - 测试 profile `gitbash-audit` / `gitbash-npm24` 与临时浏览器目录已在验证后清理；
   桌面 profile 未改动。
+
+---
+
+## 0.2.5 第二轮审计回归（2026-11-06）
+
+> 目的：再一轮深度审计后的手工路径/发现/工作目录修复，独立 profile
+> `gitbash-r2`（web 模板 + `link:` 当前仓库），端口 `56126`。
+
+### 设置页手动路径（真实 Chromium，13/13）
+
+| 检查 | 结果 |
+|---|---|
+| 初始生效 profile | ✅ Git；MSYS2 环境下拉 **disabled** |
+| 手填 `C:\msys64\usr\bin\bash.exe` 并点“使用此路径” | ✅ `msystem=auto`，生效 MSYS2 UCRT64，下拉启用 |
+| 手填 `C:\Program Files\Git\usr\bin\bash.exe` | ✅ `msystem=auto`，生效 Git，下拉再次禁用 |
+| 浏览器 | ✅ 无 console 错误、无失败请求 |
+
+![0.2.5 审计回归：手动路径与高级诊断](images/settings-row-0.2.5.png)
+
+### API / 发现
+
+- Git 直连：`R2_OK` / `MSYSTEM=MINGW64` / `pwd`，compat 尾注。
+- promote：`[still running after 1000ms; moved to background job …]`，无交接句。
+- 信号：`[killed by signal: SIGTERM]`。
+- 后台 + `job_output`：`R2_BG_OK` / `[status: completed, exit code: 0]`。
+- 盘符相对 workdir：模型传 `workdir:"C:foo"` → 工具报
+  `workdir "C:foo" is drive-relative; …`，命令未执行。
+- `/discover` 用空环境探测：7/7 profile 返回版本（Git 5.3.15、MSYS2 5.3.20）。
+- 单测 95/95；selftest 10/10；compatcheck 8 组。
+- 测试 profile 与临时浏览器目录已在验证后清理。

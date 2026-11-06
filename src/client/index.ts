@@ -69,22 +69,33 @@ function registerLocale(ctx: PluginClientContextLike, locale: LocaleLike | undef
   return register()
 }
 
+/** Read a client service without letting a missing/early provider break apply. */
+function readService<T>(ctx: PluginClientContextLike, name: string): T | undefined {
+  try {
+    const value = ctx.get(name)
+    return value === undefined || value === null ? undefined : value as T
+  } catch {
+    return undefined
+  }
+}
+
 /** Client plugin body. */
 export function apply(ctx: PluginClientContextLike): void {
-  const locale = ctx.get('locale') as LocaleLike | undefined
+  const locale = readService<LocaleLike>(ctx, 'locale')
   registerLocale(ctx, locale)
   const t: Translate = locale?.bind(LOCALE_NS) ?? ((key: string) => key)
 
-  const slots = ctx.get('slots') as SlotsServiceLike | undefined
+  const slots = readService<SlotsServiceLike>(ctx, 'slots')
   if (slots === undefined || slots === null || typeof slots.inject !== 'function') return
 
   const binder = (): SettingsScopeBinderLike | undefined => {
-    const candidate = (ctx.get('webUiSettings') ?? ctx.get('settingsScope')) as SettingsScopeBinderLike | undefined
+    const candidate = readService<SettingsScopeBinderLike>(ctx, 'webUiSettings')
+      ?? readService<SettingsScopeBinderLike>(ctx, 'settingsScope')
     return candidate !== undefined && candidate !== null && typeof candidate.bind === 'function' ? candidate : undefined
   }
 
   const nativeForm = (): SettingsScopeLike<RowConfig> | undefined => {
-    const forms = ctx.get('configForms') as ConfigFormsLike | undefined
+    const forms = readService<ConfigFormsLike>(ctx, 'configForms')
     if (forms === undefined || forms === null || typeof forms.get !== 'function') return undefined
     try {
       return forms.get<RowConfig>(SETTINGS_NAMESPACE)
@@ -105,10 +116,16 @@ export function apply(ctx: PluginClientContextLike): void {
   const seatRow = (scope: SettingsScopeLike<RowConfig> | undefined): void => {
     if (seated) return
     seated = true
-    slots.inject('settings.general.item', () => slots.register(
-      { name: 'settings.general.item', id: GENERAL_ITEM_ID, order: GENERAL_ITEM_ORDER, locale: LOCALE_NS },
-      () => createElement(TerminalToolRow, { t, scope }),
-    ))
+    try {
+      slots.inject('settings.general.item', () => slots.register(
+        { name: 'settings.general.item', id: GENERAL_ITEM_ID, order: GENERAL_ITEM_ORDER, locale: LOCALE_NS },
+        () => createElement(TerminalToolRow, { t, scope }),
+      ))
+    } catch {
+      // A duplicate slot id after an HMR re-apply is not fatal; leave the row
+      // unseated instead of letting the client plugin throw.
+      seated = false
+    }
   }
 
   const family = binder()

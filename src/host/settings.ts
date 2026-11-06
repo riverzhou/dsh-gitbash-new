@@ -42,11 +42,17 @@ export function normalizeBashPath(value: string): string {
 
 /** Read a volatile field; plain values are accepted for unit tests. */
 function readField<T>(value: unknown, fallback: T): T {
-  if (value !== null && typeof value === 'object' && typeof (value as VolatileLike<T>).get === 'function') {
-    const current = (value as VolatileLike<T>).get()
-    return current === undefined || current === null ? fallback : current
+  try {
+    if (value !== null && typeof value === 'object' && typeof (value as VolatileLike<T>).get === 'function') {
+      const current = (value as VolatileLike<T>).get()
+      return current === undefined || current === null ? fallback : current
+    }
+    return value === undefined || value === null ? fallback : (value as T)
+  } catch {
+    // A disposed or half-initialized volatile reference must not break agent
+    // creation; the schema default is the only safe fallback.
+    return fallback
   }
-  return value === undefined || value === null ? fallback : (value as T)
 }
 
 /**

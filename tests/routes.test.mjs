@@ -89,3 +89,18 @@ test('state exposes why a configured path is unusable', async () => {
   assert.match(body.problem, /does not exist/)
   assert.equal(body.candidates.length, 1)
 })
+
+test('a throwing ctx.get does not break route registration', () => {
+  const ctx = {
+    get() { throw new Error('service unavailable') },
+    on() { return () => {} },
+    effect(callback) { callback() },
+  }
+  assert.doesNotThrow(() => registerRoutes(ctx, {
+    readSettings: () => settings,
+    cache,
+    settingsAvailable: () => true,
+    capability: () => ({ supported: true, backgroundJobs: true, bashAvailable: true }),
+    lastReplace: () => undefined,
+  }))
+})
