@@ -22,6 +22,12 @@ import {
 import { clampTimeout, createBashExecution, type BashExecution } from './executor.ts'
 import { processJob, processOutcome, processSources, ringDelta } from './jobs.ts'
 import {
+  sandboxEscalationError,
+  SANDBOX_ESCALATION_UNAVAILABLE,
+  toolArgsError,
+  toolContextUnavailableError,
+} from './errors.ts'
+import {
   compatNote,
   parseExitStatus,
   renderPromoted,
@@ -87,6 +93,8 @@ interface StartedJob {
   readonly id: string
   readonly process: () => BashExecution | undefined
   readonly stopped: () => string | undefined
+  /** The original error of a registration whose preparation failed before the process published. */
+  readonly failure: () => { error: unknown } | undefined
 }
 
 /** A structured abort recognized by the dispatcher. */
@@ -99,10 +107,14 @@ function toolAborted(): Error {
 
 /** Validate everything the parameter schema cannot express. */
 function validateBashArgs(args: BashArgs, effectiveMode: SandboxMode | undefined): void {
-  if (args.command.trim().length === 0) throw new Error('invalid command: expected a non-empty string')
-  if (args.description.trim().length === 0) throw new Error('invalid description: expected a non-empty string')
+  if (args.command.trim().length === 0) {
+    throw toolArgsError(['invalid command: expected a non-empty string'])
+  }
+  if (args.description.trim().length === 0) {
+    throw toolArgsError(['invalid description: expected a non-empty string'])
+  }
   if (args.timeoutMs !== undefined && (!Number.isFinite(args.timeoutMs) || args.timeoutMs <= 0)) {
-    throw new Error(`invalid timeoutMs: expected a positive number, got ${JSON.stringify(args.timeoutMs)}`)
+    throw toolArgsError([`invalid timeoutMs: expected a positive number, got ${JSON.stringify(args.timeoutMs)}`])
   }
   // The official rule: repeating the call's effective mode needs no pairing.
   if (args.sandbox_permissions !== undefined && args.sandbox_permissions === effectiveMode) return
@@ -112,33 +124,57 @@ function validateBashArgs(args: BashArgs, effectiveMode: SandboxMode | undefined
   validateEscalationArgs(args.sandbox_permissions, justification)
 }
 
-/** Read the typed arguments from the dispatcher's raw record. */
+/** The parameter properties in schema-walk order (the model-facing order). */
+const ARGUMENT_ORDER = ['description', 'command', 'timeoutMs', 'workdir', 'run_in_background', 'sandbox_permissions', 'justification'] as const
+
+/** Read one string argument, reporting the official violation text on a type mismatch. */
+function readString(raw: Record<string, unknown>, key: string, violations: string[]): string | undefined {
+  const value = raw[key]
+  if (value === undefined) return undefined
+  if (typeof value !== 'string') {
+    violations.push(`"${key}" must be a string`)
+    return undefined
+  }
+  return value
+}
+
+/**
+ * Read the typed arguments from the dispatcher's raw record.
+ *
+ * `defineTool` normally validates the author's parameter DSL before `execute`;
+ * this tool returns raw JSON Schema instead, so it reproduces the same
+ * `ToolArgsError` violations (and their schema-walk order) itself. That keeps
+ * the model-facing text identical to the official `bash` tool on rc.3.
+ */
 function parseArgs(raw: Record<string, unknown>): BashArgs {
-  const string = (key: string): string | undefined => {
+  const violations: string[] = []
+  // Required checks come before property type checks in the dispatcher walk.
+  for (const key of ['description', 'command'] as const) {
+    if (raw[key] === undefined) violations.push(`missing required property "${key}"`)
+  }
+  const values: Record<string, unknown> = {}
+  for (const key of ARGUMENT_ORDER) {
     const value = raw[key]
-    if (value === undefined) return undefined
-    if (typeof value !== 'string') throw new Error(`invalid ${key}: expected a string`)
-    return value
+    if (value !== undefined) values[key] = value
   }
-  const description = string('description')
-  const command = string('command')
-  if (description === undefined) throw new Error('missing required argument: description')
-  if (command === undefined) throw new Error('missing required argument: command')
-  const timeout = raw.timeoutMs
-  if (timeout !== undefined && typeof timeout !== 'number') throw new Error('invalid timeoutMs: expected a number')
-  const background = raw.run_in_background
+  const description = readString(values, 'description', violations)
+  const command = readString(values, 'command', violations)
+  const timeout = values.timeoutMs
+  if (timeout !== undefined && typeof timeout !== 'number') violations.push('"timeoutMs" must be a number')
+  const workdir = readString(values, 'workdir', violations)
+  const background = values.run_in_background
   if (background !== undefined && typeof background !== 'boolean') {
-    throw new Error('invalid run_in_background: expected a boolean')
+    violations.push('"run_in_background" must be a boolean')
   }
-  const workdir = string('workdir')
-  const sandboxPermissions = string('sandbox_permissions')
-  const justification = string('justification')
+  const sandboxPermissions = readString(values, 'sandbox_permissions', violations)
+  const justification = readString(values, 'justification', violations)
+  if (violations.length > 0) throw toolArgsError(violations)
   return {
-    command,
-    description,
-    ...timeout !== undefined ? { timeoutMs: timeout } : {},
+    command: command as string,
+    description: description as string,
+    ...timeout !== undefined ? { timeoutMs: timeout as number } : {},
     ...workdir !== undefined ? { workdir } : {},
-    ...background !== undefined ? { run_in_background: background } : {},
+    ...background !== undefined ? { run_in_background: background as boolean } : {},
     ...sandboxPermissions !== undefined ? { sandbox_permissions: sandboxPermissions } : {},
     ...justification !== undefined ? { justification } : {},
   }
@@ -180,7 +216,8 @@ function bashParameters(background: boolean, promotion: boolean, escalation: rea
     description: {
       type: 'string',
       description: 'Clear, concise description of what this command does in active voice, 5-10 words (shown in the UI). '
-        + 'Examples: "ls" → "List files in current directory"; "git status" → "Show working tree status".',
+        + 'Examples: "ls" → "List files in current directory"; "git status" → "Show working tree status"; '
+        + '"npm install" → "Install package dependencies".',
     },
     command: { type: 'string', description: 'The bash command to execute.' },
     timeoutMs: {
@@ -211,7 +248,9 @@ function bashParameters(background: boolean, promotion: boolean, escalation: rea
       description: 'Required with sandbox_permissions: one sentence for the user explaining why this exact command needs the wider access. Use the language of the user’s current request.',
     }
   }
-  return { type: 'object', properties, required: ['command', 'description'] }
+  // The official schema lists `description` before `command` (it labels the
+  // call in the UI) and marks it required first; keep the same order.
+  return { type: 'object', properties, required: ['description', 'command'] }
 }
 
 /** The closed output schema (standard JSON Schema; output schemas are not the parameter DSL). */
@@ -400,7 +439,11 @@ export function createBashTool(runtime: BashToolRuntime): ToolDefinitionLike {
         cwd = await runtime.workingDirectory.ensure(exec.agent, exec.signal)
       } catch (error) {
         if (exec.signal.aborted || (error instanceof Error && error.name === 'AbortError')) throw toolAborted()
-        cwd = undefined
+        // DSH 0.2.2-rc.3 reports WORKING_DIRECTORY_* failures instead of
+        // silently returning the recorded directory. Falling back here would
+        // run the command in a directory the session no longer has, so the
+        // call fails exactly like the official bash tool.
+        throw error
       }
     }
     if (cwd === undefined) cwd = exec.agent?.session.header?.cwd
@@ -408,18 +451,19 @@ export function createBashTool(runtime: BashToolRuntime): ToolDefinitionLike {
   }
 
   const collectDshEnv = (exec: ToolExecutionLike): Record<string, string> => {
-    try {
-      return runtime.shellEnv?.collect(exec) ?? {}
-    } catch {
-      return {}
-    }
+    // A ShellEnvError for an invalid contribution must fail the call: the DSH
+    // environment facts the model relies on would otherwise be missing.
+    return runtime.shellEnv?.collect(exec) ?? {}
   }
 
   const startJob = (args: BashArgs, exec: ToolExecutionLike, env: NodeJS.ProcessEnv, cwd: string, timeoutMs: number): StartedJob => {
     const registry = runtime.jobs
-    if (registry === undefined) throw new Error('background jobs unavailable: the job registry is not composed')
+    if (registry === undefined) {
+      throw toolContextUnavailableError('background jobs unavailable: load @deepseek-ai/dsh-jobs and @deepseek-ai/dsh-tool-jobs')
+    }
     let process: BashExecution | undefined
     let stopped: string | undefined
+    let hooks: { failure(): { error: unknown } | undefined } | undefined
     const owner = exec.agent?.id
     const id = registry.start({
       kind: 'bash',
@@ -428,7 +472,7 @@ export function createBashTool(runtime: BashToolRuntime): ToolDefinitionLike {
       toolCall: { callId: exec.callId, rootCallId: exec.rootCallId ?? exec.callId },
       output: processSources(() => process),
       run: () => {
-        const hooks = processJob(
+        const job = processJob(
           async (signal) => {
             process = createBashExecution(runtime.subprocess, runtime.profile, {
               command: args.command,
@@ -442,16 +486,24 @@ export function createBashTool(runtime: BashToolRuntime): ToolDefinitionLike {
           },
           processOutcome,
         )
+        hooks = job
         return {
-          done: hooks.done,
+          done: job.done,
           cancel: (reason) => {
             stopped = reason
-            hooks.cancel(reason)
+            job.cancel(reason)
           },
         }
       },
     })
-    return { id, process: () => process, stopped: () => stopped }
+    return {
+      id,
+      process: () => process,
+      stopped: () => stopped,
+      // `run` settles the preparation asynchronously; this reads the hooks at
+      // call time, so a failure recorded after registration is still visible.
+      failure: () => hooks?.failure(),
+    }
   }
 
   const stopJob = async (registry: JobRegistryLike, id: string, owner: string | undefined): Promise<JobViewLike> => {
@@ -538,7 +590,13 @@ export function createBashTool(runtime: BashToolRuntime): ToolDefinitionLike {
       // The registry may have removed the settled job itself.
     }
     const process = attached.process()
-    if (process === undefined) throw new Error(view.detail ?? 'the bash job failed before its process was published')
+    if (process === undefined) {
+      // No process was published: the starter failed before the spawn. Keep the
+      // original error (class/message) exactly as the foreground projection
+      // would have thrown; a kill before the spawn has only its detail.
+      const failure = attached.failure()
+      throw failure === undefined ? new Error(view.detail ?? 'the bash job failed before its process was published') : failure.error
+    }
     const result = await process.result()
     const stopped = attached.stopped()
     return {
@@ -575,11 +633,17 @@ export function createBashTool(runtime: BashToolRuntime): ToolDefinitionLike {
       const standingPolicy = resolvePolicy(exec)
       const standingMode: SandboxMode = standingPolicy.mode
       validateBashArgs(args, standingMode)
-      if (args.sandbox_permissions !== undefined && escalationModes.length === 0) {
-        throw new Error('sandbox_permissions is not available in this composition (no sandboxing executor to escalate)')
-      }
       let approvedMode: SandboxMode | undefined
+      // The composition guard belongs to the paired request only, exactly as
+      // the official tool: repeating the effective mode needs no escalation
+      // surface, and a lone `sandbox_permissions` is a pairing error.
       if (args.sandbox_permissions !== undefined && args.justification !== undefined) {
+        if (escalationModes.length === 0) {
+          throw sandboxEscalationError(
+            'sandbox_permissions is not available in this composition (no sandboxing executor to escalate)',
+            SANDBOX_ESCALATION_UNAVAILABLE,
+          )
+        }
         approvedMode = await approveEscalation(
           {
             requestedMode: args.sandbox_permissions,
@@ -616,7 +680,12 @@ export function createBashTool(runtime: BashToolRuntime): ToolDefinitionLike {
       const sandbox: SandboxInfoLike = { mode: 'danger-full-access', denied: false }
 
       if (args.run_in_background === true) {
-        if (!backgroundEnabled) throw new Error('run_in_background is disabled for this deployment')
+        if (!backgroundEnabled) {
+          // The schema omits `run_in_background` in this composition, yet an
+          // undeclared key still reaches execute; reject it the way the
+          // official tool does when no job runtime is mounted.
+          throw toolContextUnavailableError('background jobs unavailable: load @deepseek-ai/dsh-jobs and @deepseek-ai/dsh-tool-jobs')
+        }
         if (exec.signal.aborted) throw toolAborted()
         const attached = startJob(args, exec, env, cwd, timeoutMs)
         const value: BackgroundValue = {

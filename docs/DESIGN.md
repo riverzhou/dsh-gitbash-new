@@ -1,7 +1,7 @@
 # dsh-gitbash 设计文档
 
-> 状态：**已定稿（2026-11-06）**。实现以本文为准；契约改动必须先改本文。
-> 基线：DSH `0.2.2-rc.1`（桌面运行时 + 源码 checkout 双重核对）。最低支持 `0.2.2`。
+> 状态：**已定稿（2026-11-14）**。实现以本文为准；契约改动必须先改本文。
+> 基线：DSH `0.2.2-rc.3`（桌面运行时 + 源码 checkout 双重核对）。最低支持 `0.2.2-rc.3`。
 
 ---
 
@@ -117,7 +117,7 @@ src/
 
 ---
 
-## 4. 契约（0.2.2）
+## 4. 契约（0.2.2-rc.3）
 
 ### 4.1 替换
 
@@ -149,7 +149,19 @@ src/
 | `sandbox_permissions` | enum `workspace-write`/`danger-full-access` | 仅在 `ctx.shell.sandboxMode` 与 `ctx.sandboxPolicy` 都存在时出现 |
 | `justification` | string | 与 `sandbox_permissions` 成对，非空一句 |
 
-参数根是开放的（未知键被忽略）；执行只读命名字段。
+参数根是开放的（未知键被忽略）；执行只读命名字段。`required` 数组顺序与官方 schema 一致：
+`["description", "command"]`（UI 描述在前）。参数 `description` 的示例也与官方逐字一致
+（含 `"npm install" → "Install package dependencies"`）。
+
+> **参数校验与错误身份（rc.3）**：本插件返回原始 JSON Schema，DSH 不会替它跑
+> `defineTool` 的 DSL 校验，所以 `parseArgs` / `validateBashArgs` 自己复刻 rc.3
+> 的 `ToolArgsError` 文本与遍历顺序：缺必填是 `missing required property "<key>"`，
+> 类型错是 `"<key>" must be a string|number|boolean`，全部 violation 用 `; ` 连接，
+> 消息前缀 `invalid arguments: `，`error.name = "ToolArgsError"`、
+> `error.code = "INVALID_ARGS"`。缺失 job runtime 与升权失败分别使用
+> `ToolContextUnavailableError` / `SandboxEscalationError` 的官方消息与 code。
+> 第三方插件无法 import `@deepseek-ai/dsh-error`，`error instanceof HarnessError`
+> 不成立，所以 `tool/result.error.info` 不会被 DSH 记录；可见文本与身份字段仍一致。
 
 > **Schema 形态（真机踩过）**：`parameters` 与 `output.schema` 都是**标准 JSON Schema**
 > —— `required` 是**数组**，写在对象节点上；叶子节点不写 `required: true`。
@@ -196,7 +208,13 @@ type BashValue =
   被截断到 0..255，`0xC0000005` 等崩溃码低位非 0，仍按退出码报告。
 - 输出：`readFrom(0)`；`truncated = lossy`；`spillPath` 透传；stdout/stderr 分段合并。
 - **启动失败检测**：exit 0 但 stderr 命中 `*** fatal error - ` / `couldn't create signal pipe` → 视为启动失败（`exitCode` 改 1 + 说明），防止 MSYS2 的 exit-0 假成功。
-- 生成失败（ENOENT/EACCES）→ 明确错误："Git Bash 无法启动：<path>；请在设置里重新发现/校验路径"。
+- 生成失败（ENOENT/EACCES）→ `BashSpawnError`，明确错误："bash could not start (…)：<path>；请在设置里重新发现/校验路径"。spawn 之后的 provider 失败同样以 `BashSpawnError` 抛出，`processOutcome` 把它映射为 job `failed`。
+- 0.2.2-rc.3 的官方 `launchFailure` 会把平台 spawn error 包成 `SubprocessError`
+  （`SUBPROCESS_SPAWN_NOT_FOUND` / `_SPAWN_FAILED`）。本插件保留自己的
+  `BashSpawnError` 文案（带 profile 路径与修复建议），因为它是 Windows 用户
+  真正需要的诊断；行为上等价：调用失败、job 失败、不会变成 exit 0。
+- `workingDirectory.ensure` 抛 `WORKING_DIRECTORY_*`、`shellEnv.collect` 抛
+  `SHELL_ENV_CONTRIBUTION_INVALID` 时，调用直接失败；不退回旧 cwd/空 env。
 
 ### 4.5 Jobs
 
@@ -206,11 +224,12 @@ type BashValue =
 - wait 超时但进程还没启动 → 合成 `foreground`：`timedOut:true, exitCode:null`，文本 `(no output)\n[timed out after <t>ms]\n[exit status unavailable]`。
 - 前台走 job/promote 需要 registry 的 `start/wait/read/kill/remove` 齐全且 admission 成功；admission 失败 → warn + 退回 deadline kill。
 - 后台取消：`AbortController` → `terminate()`；`done` 不 reject，异常映射为 `failed`。
+- **prepare 失败保真（rc.3）**：`processJob` 保存 `start`/`done` 阶段抛出的原始 error 并暴露 `failure()`；前台 job 在进程尚未发布时 rethrow 原 error（例如 `BashSpawnError`），不再包成 `new Error(view.detail)`。取消发生在 spawn 之前时仍记为 `killed`，不产生 failure。
 
 ### 4.6 沙箱模式解析
 
 - `effective = ctx.sandboxPolicy.resolve({ session }).mode`；服务缺失或结果不是已知三模式 → **拒绝执行**（fail-closed），不会默认 `danger-full-access`。替换阶段也要求该服务存在，否则保留 pwsh。
-- `sandbox_permissions` + `justification`：走官方提权语义（严格更宽、`ctx.approval.request`、固定文案）。批准后的 mode 只作用于本次调用。
+- `sandbox_permissions` + `justification`：走官方提权语义（严格更宽、`ctx.approval.request`、固定文案）。批准后的 mode 只作用于本次调用。失败按 rc.3 的 `SandboxEscalationError` 语义分类：配对/更宽校验是 `SANDBOX_ESCALATION_INVALID_ARGUMENT`，缺 approval service/agent/channel 与组合不支持是 `SANDBOX_ESCALATION_UNAVAILABLE`，用户拒绝是 `SANDBOX_ESCALATION_REJECTED`，无决定取消是 `SANDBOX_ESCALATION_CANCELLED`；若调用 signal 已 abort，先 `throwIfAborted()`，让 registry 记为 abort。
 - 本插件**不调用** `ctx.sandbox.confine`：MSYS2 在官方 ACL 令牌下无法启动。bash 以当前用户 Medium 令牌直接 spawn。
 - 结果 `sandbox`：
   - 实际完全访问 → `{ mode: 'danger-full-access', denied: false }`
@@ -371,14 +390,16 @@ interface BashProfile {
   版本把关放在工具链：`engines.dsh`（安装/装载时由 DSH 校验）与 `compatcheck`
   （开发/升级时对部署产物核对）。
 - 必需：`tools.register/restrict`、`systemPrompt.section`、`subprocess.spawn`、`agent.ctx`。
-- 可选（缺失降级）：`jobs`（无则前台超时即杀）、`workingDirectory`（无则 `session.header.cwd`）、`shellEnv`（无则无 DSH_*）、`approval`/`sandboxPolicy`（无则不 advertise 提权）、`connection`（无则设置行只读状态）、`configForms`（无则设置行只读）。
+- 可选（缺失降级）：`jobs`（无则前台超时即杀）、`workingDirectory`（无则 `session.header.cwd`；**存在时其错误必须上抛**，不吞掉）、`shellEnv`（无则无 DSH_*；存在时 `ShellEnvError` 必须上抛）、`approval`/`sandboxPolicy`（无则不 advertise 提权）、`connection`（无则设置行只读状态）、`configForms`（无则设置行只读）。
 - 关键裸字符串（事件名 `agent/created`、`tool/result.meta`、`[exit code:`、`[stderr]`、`jobId` 等）在测试里断言，避免“裸字符串等于没测”。
-- `compatcheck` 脚本（0.2.2 基线）：
+- `compatcheck` 脚本（0.2.2-rc.3 基线）：
   - 从本包 `engines.dsh` 读取 floor，读取部署的 `dsh/package.json` 并拒绝低于 floor 的运行时；
-  - 对 `dsh-tool-bash`、`dsh-agent`、`dsh-system-prompt`、`dsh-tools`、
+  - 对 `dsh-tool-bash`、`dsh-agent`、`dsh-pwsh`、`dsh-system-prompt`、`dsh-tools`、
+    `dsh-jobs`、`dsh-subprocess`、`dsh-working-directory`、`dsh-shell-env`、
     `dsh-sandbox`、`dsh-client-ui-settings`、`dsh-client-ui-settings-general`
-    的部署产物做字符串核对（含 0.2.2 的 promote 模板、8 语言提权文案、Client
-    的 `configForms` / `settings.general.item`）；
+    的部署产物做字符串核对（含 0.2.2 的 promote 模板、8 语言提权文案、rc.3
+    的 `ToolArgsError`/`JobError`/`SubprocessError`/`WorkingDirectoryError`/
+    `ShellEnvError` 消息与 code、Client 的 `configForms` / `settings.general.item`）；
   - DSH 升级后跑一次，漂移即报警。
 - `package.json` 的 `dsh.bundle.platforms: ["win32"]` 让 DSH 0.2.2 在 profile
   装载前就拒绝/跳过非 Windows Host；`cordis.patch.yml` 的平台闸保留为第二道。
@@ -395,7 +416,8 @@ interface BashProfile {
   - 提权：参数配对、严格更宽、approval outcome 映射、8 语言 `displayReason`（en/zh/ja/es/fr/de/ru/pt）、read-only 下批准 `danger-full-access`。
   - 设置：默认值、volatile 读取、无效路径、相对 `bashPath` 拒绝、抛异常的 volatile getter 回退默认值。
   - 执行器：provider 失败映射为 job `failed`，而不是裸 `killed`。
-  - 工具定义：参数/输出 schema 形状、presenter 返回值、promote 文本（无交接句）、前台 job settle 后移除、无 `value` 时的 promoted/background presenter 兜底（含 DSH spill footer）。
+  - 失败面：`workingDirectory` / `shellEnv` 错误必须上抛；取消的审批在 signal abort 后按 abort 处理。
+  - 工具定义：参数/输出 schema 形状与 required 顺序、rc.3 参数违规消息/身份、presenter 返回值、promote 文本（无交接句）、前台 job settle 后移除、prepare 失败原 error 透传、无 `value` 时的 promoted/background presenter 兜底（含 DSH spill footer）。
   - 替换：缺 `subprocess`/`sandboxPolicy` 时保留 pwsh；能力探测返回缺失原因。
   - 路由：`ctx.get` 抛异常时不阻塞插件加载。
   - 打包：`dsh.bundle.platforms`、`engines.dsh`/`engines.node` 下限、patch 平台闸。
@@ -406,22 +428,24 @@ interface BashProfile {
   - 启动失败检测（模拟 stderr `*** fatal error - `）。
   - 后台 job 的 `output/read/kill` 由 fake registry 单测覆盖（`tests/tool.test.mjs`）。
 - **真机冒烟**（新 DSH 会话）：按 AGENTS §1 的 ①~⑥ 逐条；记录命令与结果。
-  2026-10-18 在 DSH 0.2.1-rc.2、2026-11-06 在 DSH 0.2.2-rc.1 上跑通：插件加载、
+  2026-10-18 在 DSH 0.2.1-rc.2、2026-11-06 在 DSH 0.2.2-rc.1、2026-11-14 在
+  DSH 0.2.2-rc.3 上跑通：插件加载、
   `/api` state、`agent/created` 替换、模型工具目录只有 `bash`、真实 bash 调用、
   promote / 后台 / 子智能体与设置行；0.2.4 审计轮 31/31 场景 + 15/15 UI 检查，
   0.2.5 审计轮 13/13 手动路径 UI 流程，0.2.6 审计轮 read-only/审批/大输出/
-  job kill/恶意环境清除与干净最终设置行。详见 [SMOKE.md](SMOKE.md)。
+  job kill/恶意环境清除与干净最终设置行；0.2.7 在 rc.3 上复验 settings route、
+  工具目录、bash/compat、后台与 promote，并同步 rc.3 错误语义。详见 [SMOKE.md](SMOKE.md)。
 - 不使用 `lib/` 旧构建做验证（checkout 里可能 stale）；以 `src` + 部署运行时为准。
 
 ---
 
 ## 9. 打包与安装
 
-- npm 包名：`@riverzh/dsh-gitbash`（DSH entry id 仍是 `dsh-gitbash`）；`0.1.0` 是内部实现基线，`0.2.0` 是首个公开发布版本，`0.2.1` 为审计修复版，`0.2.2` 修复 Windows 信号/`PWD` 与设置页浅深色，`0.2.3` 同步 DSH 0.2.2 契约，`0.2.4`/`0.2.5`/`0.2.6` 为三轮审计修复版；License 为 `GPL-3.0-only`。
+- npm 包名：`@riverzh/dsh-gitbash`（DSH entry id 仍是 `dsh-gitbash`）；`0.1.0` 是内部实现基线，`0.2.0` 是首个公开发布版本，`0.2.1` 为审计修复版，`0.2.2` 修复 Windows 信号/`PWD` 与设置页浅深色，`0.2.3` 同步 DSH 0.2.2 契约，`0.2.4`/`0.2.5`/`0.2.6` 为三轮审计修复版，`0.2.7` 同步 DSH 0.2.2-rc.3 的错误语义与失败保真；License 为 `GPL-3.0-only`。
 - `package.json`：
   - `"type":"module"`，`main: "lib/index.js"`，`exports: { ".": ..., "./client": ... }`。
   - `"dsh": { "bundle": { "platforms": ["win32"], "patch": "./cordis.patch.yml" }, "client": { "platform": "web" } }`。
-  - `"engines": { "node": ">=24.9.0", "dsh": ">=0.2.2-0" }`（含 prerelease；不设上界，靠 compatcheck 探测漂移）。
+  - `"engines": { "node": ">=24.9.0", "dsh": ">=0.2.2-rc.3" }`（含 prerelease；不设上界，靠 compatcheck 探测漂移）。
   - 依赖：`@deepseek-ai/schemastery`（`~3.19.0`，与 DSH 0.2.2 的 runtime 一致）；dev：esbuild/typescript/@types。
 - `cordis.patch.yml`：
   ```yaml
@@ -557,3 +581,20 @@ interface BashProfile {
 | 新增单测 | ✅ 环境清除、MSYS2 环境 bin 推断/拒绝、provider failure→failed、presenter 文本兜底、COMPAT 单一来源 |
 
 未覆盖：0.2.2 受限令牌启动 MSYS2 重跑；Cygwin 无本机安装，仅单测/路径逻辑覆盖。
+
+### 12.6 2026-11-14，0.2.7 同步复验（DSH `0.2.2-rc.3`）
+
+已有 `gitbash-uitest` profile（`link:D:/GitHub/dsh-gitbash-new`，配置 MSYS2
+UCRT64），独立端口 `56127`；桌面 profile 未改动。
+
+| 项 | 结果 |
+|---|---|
+| 单测 / 自测 / 契约 | ✅ 111/111、selftest 10/10、compatcheck 12 组（运行时 `0.2.2-rc.3`，floor `0.2.2-rc.3`） |
+| 装载 / 发现 | ✅ `/api/dsh-gitbash/state` 200；`effective = msys2|c:\msys64|UCRT64`；7 个候选 |
+| 工具目录 | ✅ 40 个工具，含 `bash`、无 `pwsh`；`required = ["description","command"]`（新构建证据） |
+| system prompt | ✅ 含 `tool:bash` 的 marker 句，无 PowerShell 文案 |
+| MSYS2 直连 | ✅ `LIVE027_OK` / `MSYSTEM=UCRT64` / POSIX `PWD`，compat 尾注 + `meta.cwd` |
+| 后台 + `job_output` | ✅ `BG027_OK` / `[status: completed, exit code: 0]` |
+| promote | ✅ `[still running after 1000ms; moved to background job …]`（rc.3 文本，无交接句） |
+| rc.3 参数错误 | ✅ `Error: invalid arguments: invalid timeoutMs: expected a positive number, got 0` |
+| 未覆盖 | 设置行未在浏览器重新渲染（rc.2→rc.3 客户端契约源码无差异）；Git/子智能体/read-only/审批 UI 未重跑，沿用 12.2-12.5 证据 |

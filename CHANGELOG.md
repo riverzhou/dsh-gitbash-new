@@ -3,6 +3,70 @@
 All notable changes to this project are documented here. One version per
 entry; the Git history is the evidence.
 
+## 0.2.7 — 2026-11-14
+
+DSH 0.2.2-rc.3 sync release. The plugin now mirrors the rc.3 shell error
+model, preserves preparation failures, and raises its DSH floor to
+`>=0.2.2-rc.3`. No client-visible change: the rc.3 client settings/slot
+contracts are source-identical to rc.2.
+
+### Changed
+
+- **Argument errors (rc.3)**: the tool now reproduces the official
+  `ToolArgsError` model experience: `invalid arguments: ` prefix,
+  `missing required property "<key>"` and `"<key>" must be a string|number|boolean`
+  violations in schema-walk order, joined with `; `, plus
+  `name = "ToolArgsError"` / `code = "INVALID_ARGS"`. Empty
+  command/description/timeout keep their official messages under the same
+  prefix.
+- **Composition errors (rc.3)**: a forced `run_in_background` without a job
+  runtime now reports the official
+  `background jobs unavailable: load @deepseek-ai/dsh-jobs and @deepseek-ai/dsh-tool-jobs`
+  (`ToolContextUnavailableError` / `TOOL_CONTEXT_UNAVAILABLE`), and
+  `sandbox_permissions` without an escalation-capable composition reports
+  `SandboxEscalationError` / `SANDBOX_ESCALATION_UNAVAILABLE`.
+- **Failure fidelity (rc.3)**: `processJob` keeps the original preparation
+  error and exposes `failure()`; a foreground call whose job failed before
+  publishing its process rethrows that error (`BashSpawnError`, cancellation)
+  instead of a generic `new Error(view.detail)`.
+- **Fail closed on session facts**: `workingDirectory.ensure` errors
+  (`WORKING_DIRECTORY_*`) and `shellEnv.collect` errors
+  (`SHELL_ENV_CONTRIBUTION_INVALID`) now fail the call instead of falling back
+  to the recorded cwd or an empty environment. A `cancelled` escalation whose
+  call signal aborted rethrows the cancellation, so the registry records
+  `aborted` rather than a sandbox error.
+- **Schema parity**: parameter `required` order is `["description","command"]`
+  and the description label lists the official `npm install` example.
+- **Error identities**: new `src/host/errors.ts` mirrors the rc.3
+  `HarnessError` subclass names/codes on plain Errors. A third-party plugin
+  cannot import `@deepseek-ai/dsh-error`, so DSH still does not record
+  `error.info`; the visible message and name/code match.
+- **Floor and contract check**: `engines.dsh` is `>=0.2.2-rc.3`;
+  `compatcheck` now also asserts the rc.3 tool-bash messages, jobs
+  (`JOB_*`), subprocess (`SUBPROCESS_SPAWN_*`), working-directory,
+  shell-env and sandbox-escalation codes against the deployed bundles.
+
+### Tests
+
+- 111 tests (up from 97): argument error identity/order, schema order and
+  examples, missing job runtime, escalation identities and cancelled-abort
+  rethrow, job spawn-failure rethrow, workingDirectory/shellEnv fail-closed.
+- Selftest 10/10; `compatcheck` passes against desktop runtime
+  `0.2.2-rc.3` (floor `0.2.2-rc.3`) across 12 deployed bundles.
+- Live on DSH `0.2.2-rc.3` (`gitbash-uitest` profile): `/api/dsh-gitbash/state`,
+  a 40-tool catalog with `bash` and no `pwsh`, MSYS2 UCRT64 bash with
+  `[compat: ...]` and `meta.cwd`, a background job, timeout promotion, and
+  `Error: invalid arguments: invalid timeoutMs: expected a positive number, got 0`.
+  See `docs/SMOKE.md`.
+
+### Not covered
+
+- The rc.3 settings row was not re-rendered in a browser; the client
+  `configForms` / `slots` / locale sources are unchanged between rc.2 and
+  rc.3, and the previous rc.1 UI evidence still applies.
+- Git-profile live calls, subagents and the read-only/approval UI were not
+  re-run on rc.3; they remain covered by the unit tests and the rc.1 smoke.
+
 ## 0.2.6 — 2026-11-06
 
 Third audit release. No DSH contract change; hardens inherited shell state,

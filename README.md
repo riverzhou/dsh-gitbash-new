@@ -70,12 +70,13 @@ usage, the security model, settings, troubleshooting and development.
   runs bash unconfined and labels the result with `[compat: ...]`, `read-only`
   refuses, and `strict` allows only `danger-full-access`. See
   [Security model](#security-model-read-this-first).
-- **Verified**: 97 unit and integration tests, plus real-machine smoke on DSH
-  `0.2.2-rc.1` with Git and MSYS2 (direct, promoted, background and subagent
+- **Verified**: 111 unit and integration tests, plus real-machine smoke on DSH
+  `0.2.2-rc.3` with Git and MSYS2 (direct, promoted, background and subagent
   calls; 0.2.4 audit round 31/31 + 15/15 settings-page checks; 0.2.5 manual-path
   UI flow 13/13; 0.2.6 read-only refusal, approval allow/deny, hostile
   `BASH_ENV`/function clearing, large-output spill, job kill and a clean final
-  settings row).
+  settings row; 0.2.7 rc.3 settings route, 40-tool catalog, MSYS2 bash/compat,
+  background, promotion and `invalid arguments:` error text).
 
 ---
 
@@ -83,7 +84,7 @@ usage, the security model, settings, troubleshooting and development.
 
 | Item | Requirement |
 |---|---|
-| DSH | `>= 0.2.2` (tested on desktop runtime `0.2.2-rc.1`) |
+| DSH | `>= 0.2.2-rc.3` (tested on desktop runtime `0.2.2-rc.3`) |
 | Windows | Windows 10/11, x64; MSYS2 arm64 environments are also supported |
 | bash provider | Git for Windows and/or MSYS2 |
 | Node.js | `>= 24.9`, development/build only (the DSH 0.2.2 floor) |
@@ -107,7 +108,7 @@ the 0.2.2 plugin/profile contract. Use the CLI under the desktop install:
 ```bat
 set "DSH_CLI=%LOCALAPPDATA%\Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd"
 %DSH_CLI% --version
-:: expect 0.2.2-rc.1 or newer
+:: expect 0.2.2-rc.3 or newer
 ```
 
 Fully quit DSH Desktop before changing a profile.
@@ -129,7 +130,7 @@ Reopen DSH, then hard-refresh the Web UI (`Ctrl+Shift+R`).
 ### From npm (published)
 
 ```bat
-%DSH_CLI% plugin --profile desktop add @riverzh/dsh-gitbash@0.2.6
+%DSH_CLI% plugin --profile desktop add @riverzh/dsh-gitbash@0.2.7
 ```
 
 Use `@riverzh/dsh-gitbash@latest` for the newest release.
@@ -523,7 +524,9 @@ UCRT64, you are probably running an older plugin build or a stale session.
   backend are the authoritative view for job and subagent cards.
 - **Compatibility check**: `pnpm compatcheck` reads the installed runtime
   version, enforces the plugin's `engines.dsh` floor, and compares the deployed
-  official Host and Client bundles with the strings this plugin depends on.
+  official Host and Client bundles with the strings this plugin depends on,
+  including the 0.2.2-rc.3 `ToolArgsError` / `JobError` / `SubprocessError` /
+  `WorkingDirectoryError` / `ShellEnvError` messages and codes.
 
 For a full real-machine transcript, see [docs/SMOKE.md](docs/SMOKE.md).
 
@@ -531,7 +534,7 @@ For a full real-machine transcript, see [docs/SMOKE.md](docs/SMOKE.md).
 
 ## Compatibility and upgrades
 
-- Minimum DSH: **0.2.2**. The plugin uses structural projections of official
+- Minimum DSH: **0.2.2-rc.3**. The plugin uses structural projections of official
   services (`ctx.subprocess`, `ctx.jobs`, `ctx.sandboxPolicy`, `ctx.shellEnv`,
   `ctx.workingDirectory`, `ctx.approval`, `ctx.configForms`, etc.) and does not
   import private DSH packages.
@@ -552,16 +555,19 @@ For a full real-machine transcript, see [docs/SMOKE.md](docs/SMOKE.md).
   `dsh.bundle.platforms: ["win32"]` (DSH 0.2.2 Host admission) and
   `cordis.patch.yml` disables the entry when `process.platform !== 'win32'`.
 
-**Verified on 2026-11-06:** DSH `0.2.2-rc.1`, Git for Windows 2.56 and MSYS2
-5.3.20 (UCRT64); direct bash, promoted results, background jobs, subagents,
-SIGTERM normalization, relative workdir, strict refusal and the real settings
-row (MSYS2 switch through the UI) were exercised — 31/31 scenario checks and
-15/15 UI checks on a clean browser load. The 0.2.5 audit added a 13/13 manual
-path flow (MSYS2 → Git) through the real UI. The 0.2.6 audit added read-only
-refusal, approval allow/deny, workspace-write escalation labeling, a 108 KB
-tail/spill result, a live `job_kill`, `/tmp` workdir, end-to-end clearing of a
-hostile `BASH_ENV`/exported function, and a clean final settings row. Raw
-events: [docs/SMOKE.md](docs/SMOKE.md).
+**Verified on 2026-11-14:** DSH `0.2.2-rc.3` (desktop runtime) with the
+`gitbash-uitest` profile: the settings route, the 40-tool catalog (`bash`
+present, `pwsh` absent), a real MSYS2 UCRT64 `bash` call with the compat note
+and `meta.cwd`, a background job, timeout promotion, and the
+`Error: invalid arguments: ...` text were exercised. The previous rounds on
+DSH `0.2.2-rc.1` remain evidence for Git, subagents, SIGTERM normalization,
+relative workdir, strict refusal and the real settings row (31/31 scenario
+checks and 15/15 UI checks); 0.2.5 added a 13/13 manual path flow (MSYS2 → Git)
+through the real UI; 0.2.6 added read-only refusal, approval allow/deny,
+workspace-write escalation labeling, a 108 KB tail/spill result, a live
+`job_kill`, `/tmp` workdir, end-to-end clearing of a hostile
+`BASH_ENV`/exported function, and a clean final settings row. Raw events:
+[docs/SMOKE.md](docs/SMOKE.md).
 
 ---
 
@@ -571,7 +577,7 @@ events: [docs/SMOKE.md](docs/SMOKE.md).
 pnpm install
 pnpm build        # lib/index.js + lib/client.js
 pnpm check        # tsc --noEmit
-pnpm test         # node:test; 97 tests, including real Git/MSYS2 when present
+pnpm test         # node:test; 111 tests, including real Git/MSYS2 when present
 pnpm selftest     # pure-logic checks, no DSH needed
 pnpm compatcheck  # contract-string check against the installed DSH
 ```
@@ -608,7 +614,7 @@ pnpm test
 pnpm pack
 ```
 
-The npm package is `@riverzh/dsh-gitbash` (the DSH entry id stays `dsh-gitbash`) with `engines.dsh = ">=0.2.2-0"` and
+The npm package is `@riverzh/dsh-gitbash` (the DSH entry id stays `dsh-gitbash`) with `engines.dsh = ">=0.2.2-rc.3"` and
 `engines.node = ">=24.9.0"`. It ships the host entry, client bundle, `lib/`, `src/`,
 `cordis.patch.yml`, docs and both READMEs. `dsh.bundle.platforms` restricts the
 bundle to Windows, so a non-Windows DSH skips it before the patch is read.

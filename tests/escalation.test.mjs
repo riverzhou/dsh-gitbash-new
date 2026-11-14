@@ -109,3 +109,45 @@ test('missing approval service or agent fails closed', async () => {
     /no agent/,
   )
 })
+
+test('escalation failures carry the official SandboxEscalationError identity', async () => {
+  assert.throws(
+    () => validateEscalationArgs('danger-full-access', undefined),
+    error => error.name === 'SandboxEscalationError' && error.code === 'SANDBOX_ESCALATION_INVALID_ARGUMENT',
+  )
+  const base = { requestedMode: 'danger-full-access', justification: 'why', effectiveMode: 'workspace-write', subject: 'command' }
+  await assert.rejects(
+    approveEscalation(base, { approver: approver('rejected'), agent, callId: 'c1', toolName: 'bash' }),
+    error => error.name === 'SandboxEscalationError' && error.code === 'SANDBOX_ESCALATION_REJECTED',
+  )
+  await assert.rejects(
+    approveEscalation(base, { approver: approver('unavailable'), agent, callId: 'c1', toolName: 'bash' }),
+    error => error.name === 'SandboxEscalationError' && error.code === 'SANDBOX_ESCALATION_UNAVAILABLE',
+  )
+  await assert.rejects(
+    approveEscalation(
+      { ...base, requestedMode: 'read-only' },
+      { approver: approver('allowed-once'), agent, callId: 'c1', toolName: 'bash' },
+    ),
+    error => error.name === 'SandboxEscalationError' && error.code === 'SANDBOX_ESCALATION_INVALID_ARGUMENT',
+  )
+  await assert.rejects(
+    approveEscalation(base, { approver: undefined, agent, callId: 'c1', toolName: 'bash' }),
+    error => error.name === 'SandboxEscalationError' && error.code === 'SANDBOX_ESCALATION_UNAVAILABLE',
+  )
+})
+
+test('a cancelled approval keeps the call cancellation when its signal aborted', async () => {
+  const controller = new AbortController()
+  const base = { requestedMode: 'danger-full-access', justification: 'why', effectiveMode: 'workspace-write', subject: 'command' }
+  const approver = {
+    async request() {
+      controller.abort()
+      return 'cancelled'
+    },
+  }
+  await assert.rejects(
+    approveEscalation(base, { approver, agent, callId: 'c1', toolName: 'bash', signal: controller.signal }),
+    error => error.name === 'AbortError' && error === controller.signal.reason,
+  )
+})

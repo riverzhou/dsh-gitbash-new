@@ -123,7 +123,21 @@ test('pre-aborted signal refuses to spawn', () => {
   const controller = new AbortController()
   controller.abort()
   const subprocess = createFakeSubprocess({})
-  assert.throws(() => createBashExecution(subprocess, profile, { ...request, signal: controller.signal }))
+  assert.throws(
+    () => createBashExecution(subprocess, profile, { ...request, signal: controller.signal }),
+    error => error.name === 'AbortError',
+  )
+  assert.equal(subprocess.calls.length, 0)
+})
+
+test('a pre-aborted non-Error reason still reports AbortError', () => {
+  const controller = new AbortController()
+  controller.abort('stop now')
+  const subprocess = createFakeSubprocess({})
+  assert.throws(
+    () => createBashExecution(subprocess, profile, { ...request, signal: controller.signal }),
+    error => error.name === 'AbortError' && error.code === 'ABORTED',
+  )
   assert.equal(subprocess.calls.length, 0)
 })
 

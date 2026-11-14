@@ -125,6 +125,16 @@ const checks = [
       'run_in_background',
       'sandbox_permissions',
       'sandboxPermissionsDescription',
+      // 0.2.2-rc.3 error identities the plugin mirrors (ToolArgsError prefix,
+      // JobError, ToolContextUnavailableError, SubprocessError, failure hook).
+      'invalid command: expected a non-empty string',
+      'invalid description: expected a non-empty string',
+      'invalid timeoutMs: expected a positive number, got ',
+      '(enableRunInBackground: false)',
+      'background jobs unavailable: load @deepseek-ai/dsh-jobs and @deepseek-ai/dsh-tool-jobs',
+      'sandbox_permissions is not available in this composition (no sandboxing executor to escalate)',
+      'subprocessSpawnFailure',
+      'failure: () => hooks?.failure()',
     ],
   },
   {
@@ -146,17 +156,58 @@ const checks = [
   },
   {
     path: 'dsh/node_modules/@deepseek-ai/dsh-tools/lib/index.js',
-    label: 'tools (scoped register/restrict)',
+    label: 'tools (scoped register/restrict + error identities)',
     tokens: [
       'tools.restrict() requires a scoped context',
       'tool "${name}" must declare output { schema, render, presentationMeta? }',
       'restrict(filter)',
       'register(definition, options = {})',
+      'ToolArgsError',
+      'ToolContextUnavailableError',
+      'INVALID_ARGS',
+      'invalid arguments: ',
     ],
   },
   {
+    path: 'dsh/node_modules/@deepseek-ai/dsh-jobs/lib/index.js',
+    label: 'jobs (JobError codes)',
+    tokens: [
+      'JOB_ERROR_CODES',
+      'JOB_BACKGROUND_DISABLED',
+      'JOB_CONTROLLER_UNAVAILABLE',
+      'JOB_NOT_FOUND',
+      'JOB_FOREIGN_SESSION',
+      'JOB_LIMIT_REACHED',
+    ],
+  },
+  {
+    path: 'dsh/node_modules/@deepseek-ai/dsh-subprocess/lib/index.js',
+    label: 'subprocess (SubprocessError codes)',
+    tokens: [
+      'SUBPROCESS_SPAWN_NOT_FOUND',
+      'SUBPROCESS_SPAWN_FAILED',
+      'subprocessSpawnFailure',
+      'cannot start ',
+    ],
+  },
+  {
+    path: 'dsh/node_modules/@deepseek-ai/dsh-working-directory/lib/index.js',
+    label: 'working-directory (WorkingDirectoryError codes)',
+    tokens: [
+      'WORKING_DIRECTORY_UNAVAILABLE',
+      'WORKING_DIRECTORY_INVALID',
+      'WORKING_DIRECTORY_NOT_FOUND',
+      'working-directory/access',
+    ],
+  },
+  {
+    path: 'dsh/node_modules/@deepseek-ai/dsh-shell-env/lib/index.js',
+    label: 'shell-env (ShellEnvError code)',
+    tokens: ['SHELL_ENV_CONTRIBUTION_INVALID'],
+  },
+  {
     path: 'dsh/node_modules/@deepseek-ai/dsh-sandbox/lib/index.js',
-    label: 'sandbox (escalation vocabulary/locales)',
+    label: 'sandbox (escalation vocabulary/locales/codes)',
     tokens: [
       '[sandbox: file access denied under ',
       '[sandbox: escalation available',
@@ -168,6 +219,10 @@ const checks = [
       'Diesen Vorgang mit ',
       'Разрешить эту операцию с правами',
       'Permitir esta operação com permissões',
+      'SANDBOX_ESCALATION_INVALID_ARGUMENT',
+      'SANDBOX_ESCALATION_UNAVAILABLE',
+      'SANDBOX_ESCALATION_REJECTED',
+      'SANDBOX_ESCALATION_CANCELLED',
     ],
   },
   {

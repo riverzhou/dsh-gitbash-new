@@ -31,7 +31,7 @@ import type {
 /** The preset's Windows terminal tool name. */
 export const PWSH_TOOL_NAME = 'pwsh'
 
-/** Official prompt-section names/orders (0.2.2). */
+/** Official prompt-section names/orders (0.2.2-rc.3). */
 export const ORDER_TOOL_BASH = 1000
 export const ORDER_TOOL_PWSH = 1010
 

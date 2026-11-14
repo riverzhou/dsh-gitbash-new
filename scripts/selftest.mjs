@@ -106,7 +106,7 @@ check('bash tool shape', () => {
   })
   assert.equal(tool.name, 'bash')
   assert.equal(tool.parameters.type, 'object')
-  assert.deepEqual(tool.parameters.required, ['command', 'description'])
+  assert.deepEqual(tool.parameters.required, ['description', 'command'])
   assert.ok(Array.isArray(tool.output.schema.oneOf))
   assert.equal(typeof tool.output.presentationMeta, 'function')
   assert.equal(typeof tool.presentCall, 'function')

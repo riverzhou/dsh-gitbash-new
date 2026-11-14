@@ -33,8 +33,8 @@ test('web client half and npm entry points are declared', () => {
   assert.equal(manifest.exports['./client'].default, './lib/client.js')
 })
 
-test('dsh floor is the 0.2.2 baseline and parseable by compatcheck', () => {
-  assert.match(manifest.engines.dsh, /^>=0\.2\.2-0$/)
+test('dsh floor is the 0.2.2-rc.3 baseline and parseable by compatcheck', () => {
+  assert.equal(manifest.engines.dsh, '>=0.2.2-rc.3')
   // compatcheck derives its floor from this same field.
   const script = readFileSync(join(root, 'scripts/compatcheck.mjs'), 'utf8')
   assert.equal(script.includes("pluginManifest.engines?.dsh"), true)

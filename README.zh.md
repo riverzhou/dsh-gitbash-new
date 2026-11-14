@@ -61,11 +61,12 @@
 - **显式安全**：绝不静默放宽权限——`workspace-write` 下以完全访问运行并在结果里
   标注 `[compat: ...]`，`read-only` 拒绝，`strict` 只允许 `danger-full-access`。
   详见[安全边界](#安全边界先读)。
-- **已验证**：97 个单元/集成用例，加上 DSH `0.2.2-rc.1` 上的 Git 与 MSYS2 真机
+- **已验证**：111 个单元/集成用例，加上 DSH `0.2.2-rc.3` 上的 Git 与 MSYS2 真机
   冒烟（直连、promote、后台、子智能体；0.2.4 审计轮 31/31 场景检查 + 15/15
   设置页检查，含 strict 实机拒绝；0.2.5 手动路径 UI 流程 13/13；0.2.6 的
   read-only 拒绝、审批允许/拒绝、恶意 `BASH_ENV`/导出函数清除、大输出 spill、
-  job kill 与干净最终设置行）。
+  job kill 与干净最终设置行；0.2.7 在 rc.3 上复验 settings route、40 工具目录、
+  MSYS2 bash/compat、后台、promote 与 `invalid arguments:` 错误文本）。
 
 ---
 
@@ -73,7 +74,7 @@
 
 | 项 | 要求 |
 |---|---|
-| DSH | `>= 0.2.2`（已在桌面运行时 `0.2.2-rc.1` 实测） |
+| DSH | `>= 0.2.2-rc.3`（已在桌面运行时 `0.2.2-rc.3` 实测） |
 | Windows | Windows 10/11 x64；MSYS2 arm64 环境也可用 |
 | bash 提供方 | Git for Windows 和/或 MSYS2 |
 | Node.js | `>= 24.9`，仅构建/开发需要（DSH 0.2.2 的工作区下限） |
@@ -97,7 +98,7 @@ plugin/profile 契约。使用桌面安装目录里的 CLI：
 ```bat
 set "DSH_CLI=%LOCALAPPDATA%\Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd"
 %DSH_CLI% --version
-:: 应为 0.2.2-rc.1 或更高
+:: 应为 0.2.2-rc.3 或更高
 ```
 
 修改 profile 前先**完全退出 DSH Desktop**。
@@ -119,7 +120,7 @@ set "DSH_CLI=%LOCALAPPDATA%\Programs\DeepSeek Harness\resources\runtime\cli\bin\
 ### 从 npm 安装（已发布）
 
 ```bat
-%DSH_CLI% plugin --profile desktop add @riverzh/dsh-gitbash@0.2.6
+%DSH_CLI% plugin --profile desktop add @riverzh/dsh-gitbash@0.2.7
 ```
 
 最新版可用 `@riverzh/dsh-gitbash@latest`。
@@ -470,7 +471,9 @@ WSL 一律排除：`System32\bash.exe`、`Sysnative`、`WindowsApps`、`\\wsl$`�
 - **DSH 开发者工具**：查看原始 session 事件、消息分组和 Node 后端，是 job /
   子智能体卡片的最终依据。
 - **契约核对**：`pnpm compatcheck` 读取已安装运行时版本、执行插件的
-  `engines.dsh` 下限，并对比部署的官方 Host / Client bundle 与本插件依赖的字符串。
+  `engines.dsh` 下限，并对比部署的官方 Host / Client bundle 与本插件依赖的字符串，
+  含 0.2.2-rc.3 的 `ToolArgsError` / `JobError` / `SubprocessError` /
+  `WorkingDirectoryError` / `ShellEnvError` 消息与 code。
 
 完整的真机原始事件见 [docs/SMOKE.md](docs/SMOKE.md)。
 
@@ -478,7 +481,7 @@ WSL 一律排除：`System32\bash.exe`、`Sysnative`、`WindowsApps`、`\\wsl$`�
 
 ## 兼容与升级
 
-- 最低 DSH **0.2.2**。插件只使用官方服务的结构性投影（`ctx.subprocess`、
+- 最低 DSH **0.2.2-rc.3**。插件只使用官方服务的结构性投影（`ctx.subprocess`、
   `ctx.jobs`、`ctx.sandboxPolicy`、`ctx.shellEnv`、`ctx.workingDirectory`、
   `ctx.approval`、`ctx.configForms` 等），不 import 私有 DSH 包。
 - 替换需要 `ctx.subprocess.spawn` **和** `ctx.sandboxPolicy.resolve`：bash 在
@@ -496,11 +499,13 @@ WSL 一律排除：`System32\bash.exe`、`Sysnative`、`WindowsApps`、`\\wsl$`�
   `dsh.bundle.platforms: ["win32"]`（DSH 0.2.2 的 Host 准入），
   `cordis.patch.yml` 再在 `process.platform !== 'win32'` 时禁用 entry。
 
-**2026-11-06 真机验证**：DSH `0.2.2-rc.1`、Git for Windows 2.56、MSYS2
-5.3.20（UCRT64）；直接 bash、promote、后台任务、子智能体、SIGTERM 归一化、
-相对 workdir、strict 拒绝与真实设置行（通过 UI 切到 MSYS2）均已跑过——干净加载
-下 31/31 场景检查 + 15/15 UI 检查。0.2.5 审计又通过真实 UI 跑了 13/13 手动路径
-流程（MSYS2 → Git）。0.2.6 审计新增 read-only 拒绝、审批允许/拒绝、
+**2026-11-14 真机验证**：DSH `0.2.2-rc.3`（桌面运行时）+ `gitbash-uitest`
+profile：settings route、40 工具目录（有 `bash`、无 `pwsh`）、真实 MSYS2
+UCRT64 bash 调用（compat 尾注 + `meta.cwd`）、后台任务、超时 promote，以及
+`Error: invalid arguments: ...` 文本均已跑过。此前在 DSH `0.2.2-rc.1` 上的
+Git、子智能体、SIGTERM 归一化、相对 workdir、strict 拒绝与真实设置行
+（31/31 场景检查 + 15/15 UI 检查）仍是有效证据；0.2.5 通过真实 UI 跑了
+13/13 手动路径流程（MSYS2 → Git）；0.2.6 新增 read-only 拒绝、审批允许/拒绝、
 workspace-write 提权标注、108 KB 尾部/spill、实机 `job_kill`、`/tmp` workdir、
 端到端清除恶意 `BASH_ENV`/导出函数，以及干净的最终设置行。原始事件见
 [docs/SMOKE.md](docs/SMOKE.md)。
@@ -513,7 +518,7 @@ workspace-write 提权标注、108 KB 尾部/spill、实机 `job_kill`、`/tmp` 
 pnpm install
 pnpm build        # lib/index.js + lib/client.js
 pnpm check        # tsc --noEmit
-pnpm test         # node:test；97 个用例，含真实 Git/MSYS2（存在时）
+pnpm test         # node:test；111 个用例，含真实 Git/MSYS2（存在时）
 pnpm selftest     # 纯逻辑自测，不需要 DSH
 pnpm compatcheck  # 对已安装 DSH 做契约字符串核对
 ```
@@ -548,7 +553,7 @@ pnpm test
 pnpm pack
 ```
 
-npm 包名 `@riverzh/dsh-gitbash`（DSH entry id 仍是 `dsh-gitbash`），`engines.dsh = ">=0.2.2-0"`，`engines.node = ">=24.9.0"`。
+npm 包名 `@riverzh/dsh-gitbash`（DSH entry id 仍是 `dsh-gitbash`），`engines.dsh = ">=0.2.2-rc.3"`，`engines.node = ">=24.9.0"`。
 包含 host 入口、client bundle、`lib/`、`src/`、`cordis.patch.yml`、docs 与两份
 README。`dsh.bundle.platforms` 把 bundle 限定在 Windows，非 Windows 的 DSH 在读
 patch 之前就会跳过它。

@@ -6,7 +6,7 @@
 
 ---
 
-## 0. 当前状态（2026-11-06 实测）
+## 0. 当前状态（2026-11-14 实测）
 
 | 项 | 实测值 |
 |---|---|
@@ -15,10 +15,10 @@
 | 文件 | 插件源码 + 构建产物 `lib/` + 文档/测试/脚本（见 §3） |
 | 源码 / 技术栈 | TypeScript（host ESM + client bundle）+ esbuild；`lib/` 已构建并入库 |
 | 项目定位 | ✅ **已确定并实现**（见 §1；设计见 `docs/DESIGN.md`） |
-| 版本 / 许可 | `0.2.6` / `GPL-3.0-only` |
-| 验证 | `pnpm test` 97/97；`pnpm selftest` 10/10；`pnpm compatcheck` 通过（运行时 `0.2.2-rc.1`，floor `>=0.2.2-0`）；DSH 0.2.2-rc.1 真机：31/31 场景检查（Git/MSYS2、promote、后台、信号、workdir、子智能体）+ 15/15 设置行 UI 检查 + 13/13 手动路径 UI 流程 + 0.2.6 read-only/审批/大输出/job kill/恶意环境清除项；strict 拒绝实测（`docs/SMOKE.md`） |
+| 版本 / 许可 | `0.2.7` / `GPL-3.0-only` |
+| 验证 | `pnpm test` 111/111；`pnpm selftest` 10/10；`pnpm compatcheck` 通过（运行时 `0.2.2-rc.3`，floor `>=0.2.2-rc.3`，12 组部署产物）；DSH 0.2.2-rc.3 真机：settings route + 40 工具目录（仅 bash，无 pwsh）+ MSYS2 bash/compat + 后台 + promote + `invalid arguments:` 错误文本；历史证据（`docs/SMOKE.md`）：rc.1 的 31/31 场景 + 15/15 设置行 UI + 13/13 手动路径 UI + 0.2.6 read-only/审批/大输出/job kill/恶意环境清除；strict 拒绝实测 |
 | 平台 | Windows 10（19045）/ Git for Windows 2.56（bash 5.3.15）/ MSYS2 5.3.20（UCRT64） |
-| 运行时 | Node v24.21.0；DSH 桌面运行时 `0.2.2-rc.1` |
+| 运行时 | Node v24.21.0；DSH 桌面运行时 `0.2.2-rc.3` |
 | 已知硬约束 | Git Bash/MSYS2 无法在 DSH Windows ACL 沙箱内启动；兼容模式策略见 §1 与 README |
 
 **构建/测试命令**：`pnpm install` → `pnpm build` → `pnpm check` → `pnpm test` → `pnpm selftest` → `pnpm compatcheck`。
@@ -28,7 +28,7 @@
 
 ### 0.1 `/init` 不是 DSH 内置命令（实测）
 
-- DSH `0.2.1-rc.2` 的实测与 `0.2.2-rc.1` 源码核对都表明：`/init` 不是 DSH 内置命令（源码中没有该命令的注册），会被当作**普通消息**送到模型。
+- DSH `0.2.1-rc.2` 的实测与 `0.2.2-rc.3` 源码核对都表明：`/init` 不是 DSH 内置命令（源码中没有该命令的注册），会被当作**普通消息**送到模型。
 - 在本工作区，所有者用 `/init` 表达：**初始化或维护本仓库的 AGENTS.md**。
 - 因此接到 `/init` 时：
   1. 先核对仓库现状与本文档；
@@ -45,7 +45,7 @@
 | 交付物 | 一个可安装的 DSH 双面插件：host 半区（Git/MSYS2 profile 发现与校验、bash 工具、沙箱兼容、设置路由）+ client 半区（设置页、自动发现、MSYS2 环境选择、状态与诊断）；配套测试、中英 README、CHANGELOG、设计/冒烟文档。 |
 | 明确不做的事 | 不改 DSH 源码/安装文件；不自动选 WSL 的 bash；不引入自定义 preset；不接管 `ctx.shell`（pwsh 保留）；Linux/macOS 上不注册任何行为。 |
 | 技术栈 | TypeScript（host ESM + client bundle）、esbuild、官方 `ctx` 服务契约（结构性窄化，不 import 官方包）；Node `>=24.9.0`。 |
-| 最低 DSH | **0.2.2**（以 0.2.2-rc.1 的源码与桌面运行时为基线；用特性探测读取 0.2.x 服务）。 |
+| 最低 DSH | **0.2.2-rc.3**（以 0.2.2-rc.3 的源码与桌面运行时为基线；用特性探测读取 0.2.x 服务）。 |
 | 「怎么算做完」 | ① 新会话的模型工具目录里**只有 `bash`、没有 `pwsh`**，且 bash 命令能真实执行（真机已验证）；② **安全决策如实落地**：`workspace-write` 下 bash 以完全访问运行并在结果/设置页显式标注，`read-only` 拒绝，文件工具仍受官方沙箱（真机已验证 workspace-write；read-only/strict 由单元测试覆盖）；③ `workdir` / 后台任务 / 超时转后台 / 沙箱提权 / 终端卡片与官方 tool-bash 逐项对齐（单测 + 真机 tool call/meta.cwd）；④ 设置页能自动发现、校验、持久化 **Git 与 MSYS2** profile；⑤ 单元/集成测试与真机冒烟全绿；⑥ 安装/卸载/升级路径有文档。 |
 
 > **验收口径**：上面的 ①~⑥ 每条都要有可复现的检验步骤；无法检验的条目不算完成。
@@ -77,7 +77,7 @@
 
 ## 3. 目录约定
 
-当前（2026-11-06，已实现）：
+当前（2026-11-14，已实现）：
 
 ```text
 dsh-gitbash-new/
@@ -100,6 +100,7 @@ dsh-gitbash-new/
 │   │   ├── discover.ts    # Git/MSYS2/Cygwin profile 发现、WSL 排除、校验
 │   │   ├── env.ts         # MSYSTEM/PATH 隔离、POSIX↔Windows、workdir
 │   │   ├── escalation.ts  # 官方提权语义的本地窄化实现
+│   │   ├── errors.ts      # 官方错误身份（name/code）的本地镜像
 │   │   ├── executor.ts    # ctx.subprocess 封装：deadline/collect/启动失败检测
 │   │   ├── jobs.ts        # job sources / outcomes / cancel
 │   │   ├── render.ts      # 结果文本、标记、截断、compat note
@@ -116,7 +117,7 @@ dsh-gitbash-new/
 │       └── types.ts       # 客户端契约窄化
 ├── tests/
 │   ├── helpers/           # fake / real subprocess
-│   └── *.test.mjs         # 97 个 node:test 用例（含真实 Git/MSYS2 集成）
+│   └── *.test.mjs         # 111 个 node:test 用例（含真实 Git/MSYS2 集成）
 ├── scripts/
 │   ├── selftest.mjs       # 纯逻辑自测
 │   └── compatcheck.mjs    # 对 app.asar 里的官方产物做契约字符串核对
@@ -216,7 +217,7 @@ dsh-gitbash-new/
     en/zh/ja/es/fr/de/ru/pt。本插件的 `escalationDisplayReason` 必须与官方逐字一致
     （`tests/escalation.test.mjs` 断言），否则非中英界面会掉回英文。
 18. **compatcheck 的版本下限**：脚本从本包 `engines.dsh` 推导 floor（当前
-    `>=0.2.2-0`），读取部署的 `dsh/package.json`，低于 floor 直接失败；不要
+    `>=0.2.2-rc.3`），读取部署的 `dsh/package.json`，低于 floor 直接失败；不要
     在脚本里另写一份版本号。它还必须核对 `dsh-tool-pwsh` 的 `name: "pwsh"` 与
     `tool:pwsh`——替换目标漂移时不能只因为 bash 契约还在就放行。
 19. **替换前置能力**：`ctx.subprocess.spawn` 或 `ctx.sandboxPolicy.resolve`
@@ -266,3 +267,22 @@ dsh-gitbash-new/
     之后的 provider 错误，`processOutcome` 必须映射为 `failed`；presenter 还要
     从 `value.kind`、promote 标记文本（允许 DSH spill footer 跟随）与 background
     确认文本兜底。
+34. **0.2.2-rc.3 的错误身份（0.2.7 同步）**：rc.3 把 shell 失败改成 HarnessError
+    子类并在 `tool/result` 记录 `error.name/code`：参数违规是 `ToolArgsError`
+    （`INVALID_ARGS`，消息前缀 `invalid arguments: `；校验消息为
+    `missing required property "<key>"` / `"<key>" must be a string|number|boolean`），
+    缺 job runtime 是 `ToolContextUnavailableError`（`TOOL_CONTEXT_UNAVAILABLE`），
+    禁用后台是 `JobError`（`JOB_BACKGROUND_DISABLED`），升权失败是
+    `SandboxEscalationError`（`SANDBOX_ESCALATION_*`），spawn 失败是
+    `SubprocessError`（`SUBPROCESS_SPAWN_*`）。第三方插件无法 import
+    `@deepseek-ai/dsh-error`，`error instanceof HarnessError` 不成立，因此
+    `error.info` 不会被记录；`src/host/errors.ts` 只复刻**可见身份**（消息 +
+    `name` + `code`）。这些字符串属于 model experience，不得随意改写；
+    tool-bash 的参数 `required` 顺序是 `["description","command"]`。
+35. **0.2.2-rc.3 的失败保真（0.2.7）**：`processJob` 必须保存 prepare 阶段的
+    原始 error 并暴露 `failure()`；前台 job 在进程未发布时 rethrow 原 error，
+    不能再包成 `new Error(view.detail)`。`workingDirectory.ensure` 与
+    `shellEnv.collect` 的错误必须让调用失败（`WORKING_DIRECTORY_*` /
+    `SHELL_ENV_CONTRIBUTION_INVALID`），不得吞掉后退回旧 cwd/空 env。
+    `cancelled` 审批在 signal 已 abort 时先 `throwIfAborted()`，让 registry 记为
+    abort 而不是 sandbox error。

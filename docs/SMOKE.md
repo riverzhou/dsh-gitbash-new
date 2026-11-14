@@ -1,4 +1,4 @@
-# 真机冒烟记录 — 2026-10-18（0.2.1-rc.2）/ 2026-11-06（0.2.2-rc.1；0.2.4/0.2.5/0.2.6 审计回归）
+# 真机冒烟记录 — 2026-10-18（0.2.1-rc.2）/ 2026-11-06（0.2.2-rc.1；0.2.4/0.2.5/0.2.6 审计回归）/ 2026-11-14（0.2.2-rc.3 同步复验）
 
 > 目标：在**真实的 DSH** 里验证插件加载、设置路由、per-agent 替换、
 > 模型工具目录、bash 执行与 `meta.cwd`。不是单元测试的替代品；可复跑。
@@ -538,3 +538,111 @@ compatcheck ok
 - 单测 97/97；selftest 10/10；compatcheck 8 组通过。
 - 未覆盖：0.2.2 受限令牌启动 MSYS2 重跑；Cygwin 无本机安装。
 - 测试 profile / 临时浏览器目录已在验证后清理。
+
+---
+
+## 0.2.2-rc.3 同步复验（2026-11-14）
+
+> 目的：DSH 升级到 `0.2.2-rc.3` 后，用仓库当前构建（插件 `0.2.7`）复验
+> 插件装载、工具目录、bash/compat、后台/promote 与 rc.3 的新错误文本。
+> 使用已有的 `gitbash-uitest` profile（`link:D:/GitHub/dsh-gitbash-new`），
+> 独立端口 `56127`；桌面 profile 与桌面会话不动。
+
+### 环境
+
+| 项 | 值 |
+|---|---|
+| DSH | `0.2.2-rc.3`（Desktop 自带 CLI：`resources/runtime/cli/bin/dsh.cmd`） |
+| 插件 | 仓库当前构建 `0.2.7`，`link:D:/GitHub/dsh-gitbash-new` |
+| 测试 profile | `gitbash-uitest`（config：MSYS2 UCRT64；bundles 含 `dsh-gitbash`） |
+| 服务 | `http://127.0.0.1:56127`（独立端口） |
+| 模型 | `deepseek-flash` / `deepseek-official` |
+
+### 复跑命令
+
+```bat
+set "DSH_CLI=%LOCALAPPDATA%\Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd"
+%DSH_CLI% --profile gitbash-uitest --port 56127 --no-open
+```
+
+打开打印的 `?token=...` URL 取 cookie；随后
+`POST /api/dsh-gitbash/state`、`session/create`、`session/prompt`、
+`session/page`。request 形状与 0.2.2 相同（`payload.args.request`）。
+
+### 结果
+
+**1. 装载与发现**
+
+`/api/dsh-gitbash/state` 返回 `effective.id = msys2|c:\msys64|UCRT64`，
+7 个候选（Git + 6 个 MSYS2 环境），`capability.backgroundJobs = true`。
+路由 200，无鉴权错误。
+
+**2. 工具目录与 system prompt**
+
+`request/header.tools` 共 40 个工具，含 `bash`、**不含 `pwsh`**。
+`bash.parameters.required = ["description","command"]`，properties 依次为
+`description,command,timeoutMs,workdir,run_in_background,sandbox_permissions,justification`
+——证明加载的是 0.2.7 的新构建（0.2.6 的 required 顺序相反）。
+system prompt 含 `Check the [exit code: N] marker…`，不含 PowerShell 文案。
+
+**3. 直连 bash（MSYS2）**
+
+```text
+bash { command: "echo LIVE027_OK; echo MSYSTEM=$MSYSTEM; printf 'PWD=%s\n' \"$PWD\"; pwd", description: "live bash smoke 0.2.7" }
+→ LIVE027_OK
+  MSYSTEM=UCRT64
+  PWD=/d/GitHub/dsh-gitbash-new
+  /d/GitHub/dsh-gitbash-new
+  [compat: bash runs outside the DSH file sandbox (session mode workspace-write)]
+meta: { "cwd": "D:\\GitHub\\dsh-gitbash-new" }
+job:  bash-6c771719ca2140bf  completed, exit code: 0
+```
+
+**4. 后台 + promote**
+
+```text
+bash { command: "sleep 1; echo BG027_OK", description: "background smoke", run_in_background: true }
+→ started background job bash-365018a227ec4a00
+  [compat: bash runs outside the DSH file sandbox (session mode workspace-write)]
+job_output { wait: true } → BG027_OK / [status: completed, exit code: 0]
+
+bash { command: "echo PROMO027_BEFORE; sleep 3; echo PROMO027_AFTER", description: "promote smoke", timeoutMs: 1000 }
+→ PROMO027_BEFORE
+  [compat: bash runs outside the DSH file sandbox (session mode workspace-write)]
+  [still running after 1000ms; moved to background job bash-5d57d4948cd84692]
+job_output { wait: true } → PROMO027_AFTER / [status: completed, exit code: 0]
+```
+
+promote 文本与 rc.3 官方 `renderPromoted` 逐字一致（无旧交接句）；
+job 事件为 `job/registered` → `job/settled`（`cause: producer`，
+`detail: exit code: 0`）。
+
+**5. rc.3 参数错误文本**
+
+```text
+bash { command: "echo ARG027", description: "arg smoke", timeoutMs: 0 }
+→ Error: invalid arguments: invalid timeoutMs: expected a positive number, got 0   (isError: true)
+```
+
+与官方 `ToolArgsError` 的 model experience 一致；因为第三方插件无法
+import `@deepseek-ai/dsh-error`，该 `tool/result` 没有 `error.info` 字段
+（可见消息与 name/code 已对齐，见 AGENTS §6.34）。
+
+**6. compatcheck**
+
+```text
+ok   dsh runtime 0.2.2-rc.3 (floor 0.2.2-rc.3)
+ok   tool-bash / agent / tool-pwsh / system-prompt / tools / jobs /
+     subprocess / working-directory / shell-env / sandbox /
+     client configForms / settings.general.item
+compatcheck ok
+```
+
+### 未覆盖
+
+- 设置行未在本轮用浏览器重新渲染；rc.2→rc.3 的 `ui-settings` /
+  `ui-settings-general` / `locale` 源码无差异（`configForms`、`slots`、
+  `whileServed` 契约不变），rc.1 的 15/15 UI 证据仍适用。
+- Git profile 的 rc.3 真机调用、子智能体、read-only/审批 UI 未在本轮重跑；
+  由单元测试与 rc.1 的 31/31 场景证据覆盖。
+- 测试服务已在复验后关闭，桌面 profile 未改动。

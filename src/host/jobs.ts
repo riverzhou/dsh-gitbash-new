@@ -38,6 +38,16 @@ export function processOutcome(proc: BashExecution): JobOutcomeLike {
   }
 }
 
+/** Job hooks plus the original error of a job that failed before its process produced an outcome. */
+export interface ProcessJobHooksLike extends JobHooksLike {
+  /**
+   * The error that ended a `failed` preparation, kept with its own class and
+   * message; undefined while the job runs and for a completed or killed job.
+   * @returns the original failure, boxed so any thrown value is preserved.
+   */
+  failure(): { error: unknown } | undefined
+}
+
 /**
  * Adapt asynchronous preparation after job admission without exposing a
  * partial process. Cancellation aborts the spawn signal and kills a live
@@ -46,9 +56,10 @@ export function processOutcome(proc: BashExecution): JobOutcomeLike {
 export function processJob(
   start: (signal: AbortSignal) => Promise<BashExecution>,
   outcome: (process: BashExecution) => JobOutcomeLike,
-): JobHooksLike {
+): ProcessJobHooksLike {
   const controller = new AbortController()
   let process: BashExecution | undefined
+  let failure: { error: unknown } | undefined
   const done: Promise<JobOutcomeLike> = (async () => {
     try {
       process = await start(controller.signal)
@@ -59,8 +70,13 @@ export function processJob(
       }
       return outcome(process)
     } catch (error) {
+      // A kill before the process published is the caller's own cancellation,
+      // not a failure; anything else keeps its original error for the
+      // foreground projection that rethrows it (DSH 0.2.2-rc.3).
+      const killed = controller.signal.aborted && process === undefined
+      if (!killed) failure = { error }
       return {
-        status: controller.signal.aborted && process === undefined ? 'killed' : 'failed',
+        status: killed ? 'killed' : 'failed',
         detail: error instanceof Error ? error.message : String(error),
       }
     }
@@ -72,5 +88,6 @@ export function processJob(
       process?.kill()
     },
     done,
+    failure: () => failure,
   }
 }

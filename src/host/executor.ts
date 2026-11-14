@@ -130,7 +130,15 @@ export function createBashExecution(
   request: BashExecRequest,
 ): BashExecution {
   if (request.signal?.aborted === true) {
-    throw request.signal.reason instanceof Error ? request.signal.reason : new Error('tool call aborted')
+    // Keep the caller's own cancellation; a non-Error reason still needs the
+    // `AbortError` name for the registry to classify the call as aborted
+    // (DSH 0.2.2-rc.3 names its pre-spawn rejection the same way).
+    const reason = request.signal.reason
+    if (reason instanceof Error) throw reason
+    const error = new Error('tool call aborted')
+    error.name = 'AbortError'
+    ;(error as { code?: string }).code = 'ABORTED'
+    throw error
   }
   const stdoutMaxBytes = request.stdoutMaxBytes ?? EXEC_DEFAULTS.stdoutMaxBytes
   const maxSpillBytes = request.maxSpillBytes ?? EXEC_DEFAULTS.maxSpillBytes

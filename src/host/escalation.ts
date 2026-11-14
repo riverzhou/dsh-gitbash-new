@@ -9,6 +9,13 @@
  * runtime when available.
  */
 import type { ApprovalServiceLike, AgentLike, ToolExecutionLike } from './types.ts'
+import {
+  SANDBOX_ESCALATION_CANCELLED,
+  SANDBOX_ESCALATION_INVALID_ARGUMENT,
+  SANDBOX_ESCALATION_REJECTED,
+  SANDBOX_ESCALATION_UNAVAILABLE,
+  sandboxEscalationError,
+} from './errors.ts'
 
 export type SandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access'
 
@@ -24,13 +31,22 @@ export const WIDER_MODES: Record<string, readonly SandboxMode[]> = {
 /** Validate the `sandbox_permissions` ⇔ `justification` pairing. */
 export function validateEscalationArgs(sandboxPermissions: string | undefined, justification: string | undefined): void {
   if (sandboxPermissions !== undefined && justification === undefined) {
-    throw new Error('invalid escalation: sandbox_permissions requires a justification')
+    throw sandboxEscalationError(
+      'invalid escalation: sandbox_permissions requires a justification',
+      SANDBOX_ESCALATION_INVALID_ARGUMENT,
+    )
   }
   if (justification !== undefined && sandboxPermissions === undefined) {
-    throw new Error('invalid escalation: justification is only valid together with sandbox_permissions')
+    throw sandboxEscalationError(
+      'invalid escalation: justification is only valid together with sandbox_permissions',
+      SANDBOX_ESCALATION_INVALID_ARGUMENT,
+    )
   }
   if (justification !== undefined && justification.trim().length === 0) {
-    throw new Error('invalid justification: expected a non-empty sentence')
+    throw sandboxEscalationError(
+      'invalid justification: expected a non-empty sentence',
+      SANDBOX_ESCALATION_INVALID_ARGUMENT,
+    )
   }
 }
 
@@ -97,13 +113,22 @@ export async function approveEscalation(
   const { requestedMode: mode, effectiveMode, justification, subject } = request
   if (mode === effectiveMode) return effectiveMode
   if (!(WIDER_MODES[effectiveMode] ?? []).includes(mode as SandboxMode)) {
-    throw new Error(`sandbox escalation to "${mode}" is not strictly wider than this call's current "${effectiveMode}" mode`)
+    throw sandboxEscalationError(
+      `sandbox escalation to "${mode}" is not strictly wider than this call's current "${effectiveMode}" mode`,
+      SANDBOX_ESCALATION_INVALID_ARGUMENT,
+    )
   }
   if (approval.approver === undefined) {
-    throw new Error(`sandbox escalation to "${mode}" requires approval, but no approval service is composed`)
+    throw sandboxEscalationError(
+      `sandbox escalation to "${mode}" requires approval, but no approval service is composed`,
+      SANDBOX_ESCALATION_UNAVAILABLE,
+    )
   }
   if (approval.agent === undefined) {
-    throw new Error(`sandbox escalation to "${mode}" requires approval, but the call has no agent to route it through`)
+    throw sandboxEscalationError(
+      `sandbox escalation to "${mode}" requires approval, but the call has no agent to route it through`,
+      SANDBOX_ESCALATION_UNAVAILABLE,
+    )
   }
   const outcome = await approval.approver.request({
     agent: approval.agent,
@@ -117,11 +142,23 @@ export async function approveEscalation(
     case 'allowed-once':
       return mode as SandboxMode
     case 'rejected':
-      throw new Error(`the user rejected escalating this ${subject} to "${mode}"; it stays denied, so stop and explain instead of working around it`)
+      throw sandboxEscalationError(
+        `the user rejected escalating this ${subject} to "${mode}"; it stays denied, so stop and explain instead of working around it`,
+        SANDBOX_ESCALATION_REJECTED,
+      )
     case 'cancelled':
-      throw new Error(`approval for escalating to "${mode}" was cancelled`)
+      // A cancelled call keeps its own cancellation so the registry records
+      // it as aborted instead of a sandbox error (DSH 0.2.2-rc.3).
+      approval.signal?.throwIfAborted()
+      throw sandboxEscalationError(
+        `approval for escalating to "${mode}" was cancelled`,
+        SANDBOX_ESCALATION_CANCELLED,
+      )
     case 'unavailable':
-      throw new Error(`sandbox escalation to "${mode}" requires approval, but no approval channel is available`)
+      throw sandboxEscalationError(
+        `sandbox escalation to "${mode}" requires approval, but no approval channel is available`,
+        SANDBOX_ESCALATION_UNAVAILABLE,
+      )
     default:
       throw new Error(`unknown approval outcome: ${String(outcome)}`)
   }
