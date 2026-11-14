@@ -638,6 +638,22 @@ ok   tool-bash / agent / tool-pwsh / system-prompt / tools / jobs /
 compatcheck ok
 ```
 
+**7. 最终构建复验**
+
+提交前最后一次 `pnpm build` 后重开同一测试服务，新会话再跑一遍：
+
+```text
+bash { command: "printf 'FINAL027_OK %s\\n' \"...\"", description: "final smoke" }
+→ FINAL027_OK ...
+  [compat: bash runs outside the DSH file sandbox (session mode workspace-write)]
+meta: { "cwd": "D:\\GitHub\\dsh-gitbash-new" }
+
+bash { command: "echo SHOULD_NOT_RUN", description: "invalid arg", timeoutMs: 0 }
+→ Error: invalid arguments: invalid timeoutMs: expected a positive number, got 0
+```
+
+证明提交的 `lib/` 与上面的验证一致；测试服务随后关闭。
+
 ### 未覆盖
 
 - 设置行未在本轮用浏览器重新渲染；rc.2→rc.3 的 `ui-settings` /
