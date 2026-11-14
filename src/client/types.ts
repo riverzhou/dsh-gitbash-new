@@ -64,7 +64,7 @@ export interface SettingsScopeBinderLike {
 export interface PluginClientContextLike {
   get(name: string): unknown
   effect?(callback: () => (() => void) | void, label?: string): unknown
-  inject?(services: readonly string[], callback: () => void): unknown
+  inject?(services: readonly string[], callback: (scope: PluginClientContextLike) => void): unknown
 }
 
 /** The plugin config as the form exposes it. */

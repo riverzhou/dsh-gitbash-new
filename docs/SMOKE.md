@@ -541,9 +541,9 @@ compatcheck ok
 
 ---
 
-## 0.2.2-rc.3 同步复验（2026-11-14）
+## 0.2.2-rc.3 同步复验 / 0.2.8 审计（2026-11-14）
 
-> 目的：DSH 升级到 `0.2.2-rc.3` 后，用仓库当前构建（插件 `0.2.7`）复验
+> 目的：DSH 升级到 `0.2.2-rc.3` 后，用仓库当前构建（插件 `0.2.8`）复验
 > 插件装载、工具目录、bash/compat、后台/promote 与 rc.3 的新错误文本。
 > 使用已有的 `gitbash-uitest` profile（`link:D:/GitHub/dsh-gitbash-new`），
 > 独立端口 `56127`；桌面 profile 与桌面会话不动。
@@ -553,7 +553,7 @@ compatcheck ok
 | 项 | 值 |
 |---|---|
 | DSH | `0.2.2-rc.3`（Desktop 自带 CLI：`resources/runtime/cli/bin/dsh.cmd`） |
-| 插件 | 仓库当前构建 `0.2.7`，`link:D:/GitHub/dsh-gitbash-new` |
+| 插件 | 仓库当前构建 `0.2.8`，`link:D:/GitHub/dsh-gitbash-new` |
 | 测试 profile | `gitbash-uitest`（config：MSYS2 UCRT64；bundles 含 `dsh-gitbash`） |
 | 服务 | `http://127.0.0.1:56127`（独立端口） |
 | 模型 | `deepseek-flash` / `deepseek-official` |
@@ -582,7 +582,7 @@ set "DSH_CLI=%LOCALAPPDATA%\Programs\DeepSeek Harness\resources\runtime\cli\bin\
 `request/header.tools` 共 40 个工具，含 `bash`、**不含 `pwsh`**。
 `bash.parameters.required = ["description","command"]`，properties 依次为
 `description,command,timeoutMs,workdir,run_in_background,sandbox_permissions,justification`
-——证明加载的是 0.2.7 的新构建（0.2.6 的 required 顺序相反）。
+——证明加载的是 0.2.8 的新构建（0.2.6 的 required 顺序相反）。
 system prompt 含 `Check the [exit code: N] marker…`，不含 PowerShell 文案。
 
 **3. 直连 bash（MSYS2）**
@@ -638,7 +638,16 @@ ok   tool-bash / agent / tool-pwsh / system-prompt / tools / jobs /
 compatcheck ok
 ```
 
-**7. 最终构建复验**
+**7. 设置行 light/dark（真实 Chromium/CDP）**
+
+同一 profile 的 DSH 0.2.2-rc.3 页面，经 设置 → 通用设置 打开插件行：
+默认紧凑视图、Shell/兼容下拉、红色兼容提示、高级与诊断、页脚
+`当前版本：0.2.2-rc.3`；在 General 的浅色/深色按钮之间切换后分别截图：
+
+![0.2.8 设置行（浅色）](images/settings-row-0.2.8-light.png)
+![0.2.8 设置行（深色）](images/settings-row-0.2.8-dark.png)
+
+**8. 最终构建复验**
 
 提交前最后一次 `pnpm build` 后重开同一测试服务，新会话再跑一遍：
 
@@ -654,11 +663,19 @@ bash { command: "echo SHOULD_NOT_RUN", description: "invalid arg", timeoutMs: 0 
 
 证明提交的 `lib/` 与上面的验证一致；测试服务随后关闭。
 
+**9. 全量门禁**
+
+`pnpm test` **136/136**；`pnpm selftest` **13/13**；
+`node scripts/compatcheck.mjs --require` 通过（`dsh runtime 0.2.2-rc.3`，
+floor `0.2.2-rc.3`，12 组 bundle）。
+
 ### 未覆盖
 
-- 设置行未在本轮用浏览器重新渲染；rc.2→rc.3 的 `ui-settings` /
-  `ui-settings-general` / `locale` 源码无差异（`configForms`、`slots`、
-  `whileServed` 契约不变），rc.1 的 15/15 UI 证据仍适用。
+- 设置行已在本轮重拍 light/dark；原生下拉展开图仍是 0.2.1 的（token/控件
+  未变，闭控件已包含在新设置行里），没有 0.2.8 的原生弹层截图。
 - Git profile 的 rc.3 真机调用、子智能体、read-only/审批 UI 未在本轮重跑；
-  由单元测试与 rc.1 的 31/31 场景证据覆盖。
-- 测试服务已在复验后关闭，桌面 profile 未改动。
+  由 136 个测试与 rc.1 的 31/31 场景证据覆盖。
+- 真机驱动是临时的 CDP/curl 脚本，未入库；SMOKE 的复跑命令是可执行的
+  最小步骤，但 31/31、15/15、13/13 的历史计数是人工记录，不能从仓库一键重放。
+- 测试服务/Chrome 已在复验后关闭，测试 profile 的 theme 已恢复 `light`，
+  桌面 profile 未改动。

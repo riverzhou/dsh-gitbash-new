@@ -25,8 +25,11 @@ if (floorMatch === null) {
 }
 const MINIMUM_DSH = floorMatch[1]
 
+const argv = process.argv.slice(2)
+const requireApp = argv.includes('--require')
+const explicitPath = argv.find(value => !value.startsWith('--'))
 const candidates = [
-  process.argv[2],
+  explicitPath,
   process.env.DSH_APP_ASAR,
   process.env.LOCALAPPDATA === undefined
     ? undefined
@@ -35,7 +38,12 @@ const candidates = [
 
 const asar = candidates.find(value => existsSync(value) && statSync(value).isFile())
 if (asar === undefined) {
-  console.log('compatcheck: app.asar not found (set DSH_APP_ASAR or pass a path); skipped')
+  const message = 'compatcheck: app.asar not found (set DSH_APP_ASAR or pass a path)'
+  if (requireApp) {
+    console.error(`${message}; --require makes this a failure`)
+    process.exit(1)
+  }
+  console.log(`${message}; skipped`)
   process.exit(0)
 }
 

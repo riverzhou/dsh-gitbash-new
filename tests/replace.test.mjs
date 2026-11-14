@@ -18,17 +18,19 @@ const settings = { bashPath: '', msystem: 'auto', compat: 'auto' }
 function fakeTools({ restrictThrows = false } = {}) {
   const registrations = []
   const restrictions = []
+  const released = []
   return {
     registrations,
     restrictions,
+    released,
     restrict(filter) {
       restrictions.push(filter)
       if (restrictThrows) throw new Error('unknown global tool "pwsh"')
-      return () => {}
+      return () => released.push('restrict')
     },
     register(definition) {
       registrations.push(definition)
-      return () => {}
+      return () => released.push(`register:${definition.name}`)
     },
   }
 }
@@ -49,10 +51,12 @@ function fakePrompt() {
 
 function fakeHost() {
   const listeners = []
+  const effects = []
   const subprocess = createFakeSubprocess({ stdout: 'ok\n' })
   return {
     subprocess,
     listeners,
+    effects,
     get(name) {
       if (name === 'subprocess') return subprocess
       if (name === 'shell') return { sandboxMode: 'workspace-write' }
@@ -65,7 +69,11 @@ function fakeHost() {
       listeners.push({ event, listener })
       return () => {}
     },
-    effect() {},
+    effect(callback) {
+      const dispose = callback()
+      effects.push(dispose)
+      return dispose
+    },
   }
 }
 
@@ -187,4 +195,20 @@ test('registerReplacement applies on agent/created and reports the attempt', () 
   assert.equal(attempts[0].attempt.applied, true)
   assert.equal(attempts[0].target.id, 'agent-1')
   assert.equal(tools.registrations.length, 1)
+})
+
+test('the plugin-scope effects release the replacement when the plugin unloads', () => {
+  const host = fakeHost()
+  const tools = fakeTools()
+  const prompt = fakePrompt()
+  const agent = fakeAgent(tools, prompt)
+  const attempt = replaceTerminalTool(host, agent, settings, profile)
+  assert.equal(attempt.applied, true)
+  assert.equal(host.effects.length > 0, true)
+  for (const release of [...host.effects].reverse()) release()
+  assert.equal(tools.released.includes('restrict'), true)
+  assert.equal(tools.released.includes('register:bash'), true)
+  // Releasing twice is safe (the plugin and the agent scope both own a release).
+  for (const release of host.effects) release()
+  assert.equal(tools.released.filter(item => item === 'register:bash').length, 1)
 })

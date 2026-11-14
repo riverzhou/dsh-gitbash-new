@@ -81,13 +81,19 @@ export function compatNote(value: { compat?: boolean; sessionMode?: string }): s
  * Split the rendered text into the output body and the terminal exit status.
  * The consumed marker is removed because the card shows it as a pill.
  */
-export function parseExitStatus(text: string): { body: string } & ({ exitCode: number } | { signal: string } | { unavailable: true }) {
+export function parseExitStatus(text: string): { body: string } & ({ exitCode: number | null } | { signal: string }) {
   const signal = /\n\[killed by signal: ([^\]\n]+)\]$/.exec(text)
   if (signal?.[1] !== undefined) return { body: text.slice(0, signal.index), signal: signal[1] }
-  const exit = /\n\[exit code: (\d+)\]$/.exec(text)
-  if (exit?.[1] !== undefined) return { body: text.slice(0, exit.index), exitCode: Number(exit[1]) }
-  const unavailable = /\n\[exit status unavailable\]$/.exec(text)
-  if (unavailable !== null) return { body: text.slice(0, unavailable.index), unavailable: true }
+  const exit = /\n\[exit code: (-?\d+|null)\]$/.exec(text)
+  if (exit?.[1] !== undefined) {
+    // DSH 0.2.2-rc.3's Web card parser accepts an explicit null exit code and
+    // renders its "no exit code" pill; the Host renderer emits that literal
+    // for a settled process without an exit status.
+    return { body: text.slice(0, exit.index), exitCode: exit[1] === 'null' ? null : Number(exit[1]) }
+  }
+  // Replay of results written before 0.2.7: keep consuming the old marker.
+  const legacy = /\n\[exit status unavailable\]$/.exec(text)
+  if (legacy !== null) return { body: text.slice(0, legacy.index), exitCode: null }
   return { body: text, exitCode: 0 }
 }
 
@@ -107,7 +113,7 @@ export function renderResult(result: ForegroundValue): string {
   if (result.timedOut) notes.push(`[timed out after ${result.timeoutMs}ms]`)
   if (result.stopped !== undefined) notes.push(`[stopped: ${result.stopped}]`)
   if (result.signal !== null) notes.push(`[killed by signal: ${result.signal}]`)
-  else if (result.exitCode === null) notes.push('[exit status unavailable]')
+  else if (result.exitCode === null) notes.push('[exit code: null]')
   else if (result.exitCode !== 0) notes.push(`[exit code: ${result.exitCode}]`)
   if (notes.length === 0) return body
   if (!body.endsWith('\n')) body += '\n'

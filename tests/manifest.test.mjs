@@ -30,7 +30,25 @@ test('bundle patch keeps the second platform gate', () => {
 test('web client half and npm entry points are declared', () => {
   assert.equal(manifest.dsh.client.platform, 'web')
   assert.equal(manifest.main, 'lib/index.js')
-  assert.equal(manifest.exports['./client'].default, './lib/client.js')
+  assert.equal(manifest.exports['.'], './lib/index.js')
+  assert.equal(manifest.exports['./client'], './lib/client.js')
+  // No hand-written .d.ts is shipped; the previous src/*.ts type entries were
+  // not consumable (they import .ts paths and client-only react).
+  assert.equal(manifest.types, undefined)
+  assert.equal(manifest.exports['.'].types, undefined)
+})
+
+test('release identity and shipped files are pinned', () => {
+  assert.equal(manifest.name, '@riverzh/dsh-gitbash')
+  assert.equal(manifest.version, '0.2.8')
+  assert.equal(manifest.license, 'GPL-3.0-only')
+  assert.equal(manifest.publishConfig?.access, 'public')
+  for (const required of [
+    'lib', 'src', 'cordis.patch.yml', 'README.md', 'README.zh.md',
+    'CHANGELOG.md', 'LICENSE', 'docs',
+  ]) {
+    assert.equal(manifest.files.includes(required), true, required)
+  }
 })
 
 test('dsh floor is the 0.2.2-rc.3 baseline and parseable by compatcheck', () => {

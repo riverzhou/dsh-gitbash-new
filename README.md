@@ -11,7 +11,7 @@ escalation, terminal cards, PTC and `meta.cwd`.
 This is the complete user manual and reference. It covers installation, daily
 usage, the security model, settings, troubleshooting and development.
 
-> **Minimum DSH: 0.2.2.** Windows 10/11 only. The replacement applies to **new
+> **Minimum DSH: 0.2.2-rc.3.** Windows 10/11 only. The replacement applies to **new
 > sessions**; existing sessions keep the tools they were created with.
 
 ---
@@ -70,13 +70,14 @@ usage, the security model, settings, troubleshooting and development.
   runs bash unconfined and labels the result with `[compat: ...]`, `read-only`
   refuses, and `strict` allows only `danger-full-access`. See
   [Security model](#security-model-read-this-first).
-- **Verified**: 111 unit and integration tests, plus real-machine smoke on DSH
-  `0.2.2-rc.3` with Git and MSYS2 (direct, promoted, background and subagent
-  calls; 0.2.4 audit round 31/31 + 15/15 settings-page checks; 0.2.5 manual-path
-  UI flow 13/13; 0.2.6 read-only refusal, approval allow/deny, hostile
-  `BASH_ENV`/function clearing, large-output spill, job kill and a clean final
-  settings row; 0.2.7 rc.3 settings route, 40-tool catalog, MSYS2 bash/compat,
-  background, promotion and `invalid arguments:` error text).
+- **Verified**: 136 unit and integration tests, plus real-machine smoke on DSH
+  `0.2.2-rc.3` (MSYS2: settings route and real settings row, 40-tool catalog,
+  direct/promoted/background calls, `invalid arguments:` text) and the earlier
+  DSH `0.2.2-rc.1` runs for Git/MSYS2 (direct, promoted, background, subagent
+  calls; 0.2.4 audit 31/31 + 15/15 settings-page checks; 0.2.5 manual-path UI
+  13/13; 0.2.6 read-only refusal, approval allow/deny, hostile `BASH_ENV`
+  clearing, large-output spill, job kill). 0.2.8 is the full audit round with
+  fresh light/dark screenshots.
 
 ---
 
@@ -87,7 +88,7 @@ usage, the security model, settings, troubleshooting and development.
 | DSH | `>= 0.2.2-rc.3` (tested on desktop runtime `0.2.2-rc.3`) |
 | Windows | Windows 10/11, x64; MSYS2 arm64 environments are also supported |
 | bash provider | Git for Windows and/or MSYS2 |
-| Node.js | `>= 24.9`, development/build only (the DSH 0.2.2 floor) |
+| Node.js | `>= 24.9`, development/build only (the DSH 0.2.2-rc.3 floor) |
 | Optional | Cygwin, best-effort and not recommended |
 
 - Git Bash and MSYS2 both use the MSYS2 runtime. That runtime cannot start
@@ -103,7 +104,7 @@ usage, the security model, settings, troubleshooting and development.
 ### Use the CLI that ships with DSH Desktop
 
 Do **not** use an old global npm `dsh` (for example `0.1.7`); it does not know
-the 0.2.2 plugin/profile contract. Use the CLI under the desktop install:
+the 0.2.2-rc.3 plugin/profile contract. Use the CLI under the desktop install:
 
 ```bat
 set "DSH_CLI=%LOCALAPPDATA%\Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd"
@@ -130,7 +131,7 @@ Reopen DSH, then hard-refresh the Web UI (`Ctrl+Shift+R`).
 ### From npm (published)
 
 ```bat
-%DSH_CLI% plugin --profile desktop add @riverzh/dsh-gitbash@0.2.7
+%DSH_CLI% plugin --profile desktop add @riverzh/dsh-gitbash@0.2.8
 ```
 
 Use `@riverzh/dsh-gitbash@latest` for the newest release.
@@ -184,12 +185,15 @@ skips because `pwsh` is no longer restrictable. The log contains
 6. Confirm the model calls `bash` (not `pwsh`) and the result carries the
    expected cwd.
 
-The settings row looks like this:
+The settings row looks like this (DSH `0.2.2-rc.3`, 2026-11-14):
 
-![Settings row: terminal tool](docs/images/settings-row-0.2.5.png)
+![Settings row, dark theme](docs/images/settings-row-0.2.8-dark.png)
+![Settings row, light theme](docs/images/settings-row-0.2.8-light.png)
 
-The Shell, Compatibility and MSYS2-environment dropdowns use the DSH light/dark
-surface tokens, so both the closed control and the open list stay readable:
+The Shell, Compatibility and MSYS2-environment controls use the DSH light/dark
+surface tokens, so the closed control and the open native list stay readable.
+The open-list captures below are from the original theme fix (DSH `0.2.1`); the
+same tokens and controls are used by 0.2.8:
 
 ![Shell dropdown in dark theme](docs/images/settings-dropdown-dark.png)
 ![Shell dropdown in light theme](docs/images/settings-dropdown-light.png)
@@ -493,7 +497,7 @@ UCRT64, you are probably running an older plugin build or a stale session.
 | Symptom | What to do |
 |---|---|
 | Settings says no bash found | Install Git for Windows or MSYS2; click **Refresh**; or enter `<root>\usr\bin\bash.exe` manually (no quotes) |
-| New session still has `pwsh` | Confirm DSH `>= 0.2.2`, the plugin is in the profile bundles, and DSH was restarted; inspect `%TEMP%\dsh-gitbash.log` for `replace:` |
+| New session still has `pwsh` | Confirm DSH `>= 0.2.2-rc.3`, the plugin is in the profile bundles, and DSH was restarted; inspect `%TEMP%\dsh-gitbash.log` for `replace:` |
 | Only old sessions have no bash | Replacement is per-agent; start a new session. Subagents inherit from their parent |
 | Git session reports `MSYSTEM=UCRT64` | Old `bin\bash.exe` path/build; use Auto/Refresh; current builds canonicalize to `usr\bin\bash.exe` |
 | MSYS2 environment not installed | Install it in MSYS2; the profile only lists environments whose `bin` directory exists |
@@ -525,8 +529,11 @@ UCRT64, you are probably running an older plugin build or a stale session.
 - **Compatibility check**: `pnpm compatcheck` reads the installed runtime
   version, enforces the plugin's `engines.dsh` floor, and compares the deployed
   official Host and Client bundles with the strings this plugin depends on,
-  including the 0.2.2-rc.3 `ToolArgsError` / `JobError` / `SubprocessError` /
-  `WorkingDirectoryError` / `ShellEnvError` messages and codes.
+  including the 0.2.2-rc.3 `ToolArgsError` / `ToolContextUnavailableError` /
+  `SandboxEscalationError` / `WorkingDirectoryError` / `ShellEnvError` messages
+  and the official `JobError` / `SubprocessError` code lists. Use
+  `node scripts/compatcheck.mjs --require` as a release gate (a missing
+  `app.asar` otherwise skips with exit 0).
 
 For a full real-machine transcript, see [docs/SMOKE.md](docs/SMOKE.md).
 
@@ -556,10 +563,12 @@ For a full real-machine transcript, see [docs/SMOKE.md](docs/SMOKE.md).
   `cordis.patch.yml` disables the entry when `process.platform !== 'win32'`.
 
 **Verified on 2026-11-14:** DSH `0.2.2-rc.3` (desktop runtime) with the
-`gitbash-uitest` profile: the settings route, the 40-tool catalog (`bash`
-present, `pwsh` absent), a real MSYS2 UCRT64 `bash` call with the compat note
-and `meta.cwd`, a background job, timeout promotion, and the
-`Error: invalid arguments: ...` text were exercised. The previous rounds on
+`gitbash-uitest` profile: the settings route and its real light/dark settings
+row, the 40-tool catalog (`bash` present, `pwsh` absent), a real MSYS2 UCRT64
+`bash` call with the compat note and `meta.cwd`, a background job, timeout
+promotion, and the `Error: invalid arguments: ...` text were exercised; the
+0.2.8 audit added the client/host regression tests and the hardening listed in
+CHANGELOG. The previous rounds on
 DSH `0.2.2-rc.1` remain evidence for Git, subagents, SIGTERM normalization,
 relative workdir, strict refusal and the real settings row (31/31 scenario
 checks and 15/15 UI checks); 0.2.5 added a 13/13 manual path flow (MSYS2 → Git)
@@ -577,10 +586,15 @@ workspace-write escalation labeling, a 108 KB tail/spill result, a live
 pnpm install
 pnpm build        # lib/index.js + lib/client.js
 pnpm check        # tsc --noEmit
-pnpm test         # node:test; 111 tests, including real Git/MSYS2 when present
+pnpm test         # node:test; 136 tests, including real Git/MSYS2 when present
 pnpm selftest     # pure-logic checks, no DSH needed
 pnpm compatcheck  # contract-string check against the installed DSH
 ```
+
+These commands require a checkout: the published npm tarball ships the runtime
+files and docs, not `tests/` or `scripts/`. For a release gate use
+`node scripts/compatcheck.mjs --require` so a missing `app.asar` fails instead
+of skipping.
 
 Real integration tests discover local Git/MSYS2 installations and skip when
 absent. They exercise `MSYSTEM`, PATH isolation, exit codes, stderr, real child

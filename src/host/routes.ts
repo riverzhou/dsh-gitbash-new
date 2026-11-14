@@ -6,7 +6,7 @@
  * physical `/api` carrier owns auth and the login fence.
  */
 import type { BashProfile, DiscoveryCache } from './discover.ts'
-import { profileFromPath, resolveEffectiveProfile } from './discover.ts'
+import { profileFromPath } from './discover.ts'
 import type { TerminalToolSettings } from './types.ts'
 import type { ConnectionServiceLike, FetchRouteLike, HostContextLike } from './types.ts'
 import { ROUTE_DISCOVER, ROUTE_STATE, ROUTE_VALIDATE, SETTINGS_NAMESPACE } from '../shared/protocol.ts'
@@ -19,7 +19,7 @@ export interface RouteDeps {
   readonly readSettings: () => TerminalToolSettings
   readonly cache: DiscoveryCache
   readonly settingsAvailable: () => boolean
-  readonly capability: () => StateView['capability']
+  readonly capability: (bashAvailable: boolean) => StateView['capability']
   readonly lastReplace: () => ReplaceView | undefined
 }
 
@@ -83,7 +83,17 @@ export function registerRoutes(ctx: HostContextLike, deps: RouteDeps): void {
             }
           },
         })
-        target.effect?.(() => () => { if (typeof dispose === 'function') void dispose() }, `dsh-gitbash: route ${path}`)
+        target.effect?.(() => () => {
+          if (typeof dispose !== 'function') return
+          try {
+            const pending = dispose()
+            if (pending !== undefined && typeof (pending as Promise<void>).catch === 'function') {
+              void (pending as Promise<void>).catch(error => diag(`routes: dispose ${path} failed: ${messageOf(error)}`))
+            }
+          } catch (error) {
+            diag(`routes: dispose ${path} failed: ${messageOf(error)}`)
+          }
+        }, `dsh-gitbash: route ${path}`)
         diag(`routes: registered ${path}`)
       } catch (error) {
         diag(`routes: register ${path} failed: ${messageOf(error)}`)
@@ -92,8 +102,17 @@ export function registerRoutes(ctx: HostContextLike, deps: RouteDeps): void {
 
     make(ROUTE_STATE, (): StateView => {
       const settings = deps.readSettings()
-      const resolved = resolveEffectiveProfile(settings, deps.cache, false)
-      const cached = deps.cache.get()
+      // Never start a cold synchronous scan inside a request: reuse the startup
+      // cache so opening Settings stays instant even if the warm scan failed.
+      const cached = deps.cache.peek() ?? {
+        candidates: [] as const,
+        notes: ['discovery has not completed'],
+      }
+      const resolved = settings.bashPath.length > 0
+        ? profileFromPath(settings.bashPath, settings.msystem, false)
+        : cached.recommended !== undefined
+          ? { profile: cached.recommended }
+          : { problem: cached.notes[0] ?? 'no usable Git Bash / MSYS2 installation found' }
       const lastReplace = deps.lastReplace()
       return {
         ok: true,
@@ -106,7 +125,7 @@ export function registerRoutes(ctx: HostContextLike, deps: RouteDeps): void {
         ...resolved.problem !== undefined ? { problem: resolved.problem } : {},
         candidates: cached.candidates.map(toView),
         ...cached.recommended !== undefined ? { recommended: toView(cached.recommended) } : {},
-        capability: deps.capability(),
+        capability: deps.capability(resolved.profile !== undefined),
         ...lastReplace !== undefined ? { lastReplace } : {},
         namespace: SETTINGS_NAMESPACE,
       }

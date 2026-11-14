@@ -3,7 +3,7 @@
  * persistence) plus the host's read-only `/api` status.
  */
 import { fetchDiscover, fetchState, fetchValidate } from './api.ts'
-import { stripMatchingQuotes } from '../shared/protocol.ts'
+import { COMPAT_MODES, MSYSTEM_SETTINGS, stripMatchingQuotes } from '../shared/protocol.ts'
 import type { SettingsScopeLike, Translate } from './types.ts'
 import type { BashProfileView, CapabilityView, CompatMode, MsystemSetting, ReplaceView, StateView } from '../shared/protocol.ts'
 
@@ -80,12 +80,22 @@ function shallowEqual(a: object, b: object): boolean {
 /** Normalize a form value into the config the row uses. */
 function configOf(value: unknown): RowConfig {
   const record = typeof value === 'object' && value !== null ? value as Record<string, unknown> : {}
+  const msystem = typeof record.msystem === 'string' && (MSYSTEM_SETTINGS as readonly string[]).includes(record.msystem)
+    ? record.msystem as MsystemSetting
+    : 'auto'
+  const compat = typeof record.compat === 'string' && (COMPAT_MODES as readonly string[]).includes(record.compat)
+    ? record.compat as CompatMode
+    : 'auto'
   return {
     bashPath: typeof record.bashPath === 'string' ? stripMatchingQuotes(record.bashPath) : '',
-    msystem: typeof record.msystem === 'string' ? record.msystem as MsystemSetting : 'auto',
-    compat: typeof record.compat === 'string' ? record.compat as CompatMode : 'auto',
+    msystem,
+    compat,
   }
 }
+
+/** Notice literals shared with the row so it can localize them. */
+export const NOTICE_VERSION_OK = 'bash --version OK'
+export const NOTICE_VERSION_OK_UNSAVED = 'bash --version OK (unsaved path)'
 
 /** The controller the row subscribes to. */
 export interface RowController {
@@ -93,7 +103,8 @@ export interface RowController {
   start(): () => void
   setConfig(patch: Partial<RowConfig>): Promise<void>
   discover(): Promise<void>
-  validate(): Promise<void>
+  /** Validate the saved path or the draft the user is editing. */
+  validate(path?: string): Promise<void>
   useProfile(profile: BashProfileView): Promise<void>
   resetAuto(): Promise<void>
   refresh(): Promise<void>
@@ -123,38 +134,104 @@ export function createRowController(scope: SettingsScopeLike<RowConfig> | undefi
     validating: false,
   })
   let disposed = false
+  let pendingSaves = 0
+  let stateSequence = 0
+  let discoverSequence = 0
+  let validateSequence = 0
+  /**
+   * The operation that owns the current error. A passive /state refresh must
+   * not erase a save/validate/discover failure the user has not seen yet.
+   */
+  let errorOwner: 'refresh' | 'save' | 'discover' | 'validate' | undefined
+
+  const clearOwnedError = (owner: typeof errorOwner): void => {
+    if (errorOwner !== owner) return
+    errorOwner = undefined
+    store.setState({ error: undefined })
+  }
+
+  const isProfile = (value: unknown): value is BashProfileView => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+    const record = value as Record<string, unknown>
+    return typeof record.id === 'string'
+      && typeof record.path === 'string'
+      && typeof record.root === 'string'
+      && typeof record.label === 'string'
+      && typeof record.flavor === 'string'
+      && typeof record.valid === 'boolean'
+  }
+
+  const isCapability = (value: unknown): value is CapabilityView => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+    const record = value as Record<string, unknown>
+    return typeof record.supported === 'boolean'
+      && typeof record.backgroundJobs === 'boolean'
+      && typeof record.bashAvailable === 'boolean'
+  }
+
+  const isLastReplace = (value: unknown): boolean => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+    const record = value as Record<string, unknown>
+    return typeof record.applied === 'boolean'
+      && (record.reason === undefined || typeof record.reason === 'string')
+  }
+
+  /** Reject malformed 200 responses instead of letting the row render crash. */
+  const assertState = (state: StateView): void => {
+    if (typeof state !== 'object' || state === null || Array.isArray(state)) throw new Error('unexpected /state response')
+    const record = state as unknown as Record<string, unknown>
+    if (typeof record.platform !== 'string'
+      || !Array.isArray(record.candidates) || !record.candidates.every(isProfile)
+      || !isCapability(record.capability)
+      || (record.problem !== undefined && typeof record.problem !== 'string')
+      || (record.capability as { reason?: unknown }).reason !== undefined
+        && typeof (record.capability as { reason?: unknown }).reason !== 'string'
+      || (record.capability as { shellSandboxMode?: unknown }).shellSandboxMode !== undefined
+        && typeof (record.capability as { shellSandboxMode?: unknown }).shellSandboxMode !== 'string'
+      || record.lastReplace !== undefined && !isLastReplace(record.lastReplace)
+      || (record.effective !== undefined && !isProfile(record.effective))
+      || (record.recommended !== undefined && !isProfile(record.recommended))) {
+      throw new Error('unexpected /state response')
+    }
+  }
 
   const applyState = (state: StateView): void => {
+    assertState(state)
     const snapshot = snapshotOf()
+    const fromState = configOf({ bashPath: state.bashPath, msystem: state.msystem, compat: state.compat })
     store.setState({
       status: 'ready',
       scopeStatus: snapshot?.status ?? 'unavailable',
       writable: snapshot?.writable ?? false,
       platform: state.platform,
-      config: snapshot?.value !== undefined ? configOf(snapshot.value) : {
-        bashPath: state.bashPath,
-        msystem: state.msystem,
-        compat: state.compat,
-      },
+      config: snapshot?.value !== undefined ? configOf(snapshot.value) : fromState,
       ...(state.effective !== undefined ? { effective: state.effective } : { effective: undefined }),
       ...(state.problem !== undefined ? { problem: state.problem } : { problem: undefined }),
       candidates: state.candidates,
       ...(state.recommended !== undefined ? { recommended: state.recommended } : { recommended: undefined }),
       discovered: true,
-      error: undefined,
       capability: state.capability,
       ...(state.lastReplace !== undefined ? { lastReplace: state.lastReplace } : { lastReplace: undefined }),
+      // A fresh problem invalidates an older success notice.
+      ...(state.problem !== undefined ? { notice: undefined } : {}),
     })
   }
 
   const refresh = async (): Promise<void> => {
+    const sequence = ++stateSequence
     try {
       const state = await fetchState()
-      if (disposed) return
+      if (disposed || sequence !== stateSequence) return
+      clearOwnedError('refresh')
       applyState(state)
     } catch (error) {
-      if (disposed) return
-      store.setState({ status: 'error', error: messageOf(error) })
+      if (disposed || sequence !== stateSequence) return
+      // A passive refresh must not hide a save/validate/discover error the user
+      // has not acted on yet. Only refresh owns the slot while it is unowned.
+      if (errorOwner === undefined || errorOwner === 'refresh') {
+        errorOwner = 'refresh'
+        store.setState({ status: 'error', error: messageOf(error) })
+      }
     }
   }
 
@@ -165,10 +242,17 @@ export function createRowController(scope: SettingsScopeLike<RowConfig> | undefi
       const sync = (): void => {
         const snapshot = snapshotOf()
         if (snapshot === undefined) return
+        const current = store.getState().config
+        const next = snapshot.value !== undefined ? configOf(snapshot.value) : undefined
+        // Clear a success notice only when the config actually changed; an
+        // unrelated settings publication must not erase it.
+        const changed = next !== undefined
+          && (next.bashPath !== current.bashPath || next.msystem !== current.msystem || next.compat !== current.compat)
         store.setState({
           scopeStatus: snapshot.status,
           writable: snapshot.writable,
-          ...snapshot.value !== undefined ? { config: configOf(snapshot.value) } : {},
+          ...next !== undefined ? { config: next } : {},
+          ...changed ? { notice: undefined } : {},
         })
       }
       sync()
@@ -187,7 +271,12 @@ export function createRowController(scope: SettingsScopeLike<RowConfig> | undefi
 
   const save = async (patch: Partial<RowConfig>): Promise<void> => {
     if (scope === undefined) throw new Error('settings form unavailable')
-    store.setState({ saving: true, error: undefined })
+    // A save changes the config a Test was started against; drop its late
+    // response and clear the spinner the abandoned Test would have cleared.
+    validateSequence += 1
+    pendingSaves += 1
+    errorOwner = undefined
+    store.setState({ saving: true, validating: false, error: undefined, notice: undefined })
     try {
       const entries = Object.entries(patch) as [keyof RowConfig, RowConfig[keyof RowConfig]][]
       if (entries.length > 0) {
@@ -207,11 +296,15 @@ export function createRowController(scope: SettingsScopeLike<RowConfig> | undefi
           }
         }
       }
-      store.setState({ config: { ...store.getState().config, ...patch }, saving: false, notice: undefined })
+      store.setState({ config: { ...store.getState().config, ...patch }, notice: undefined })
       await refresh()
     } catch (error) {
-      store.setState({ saving: false, error: messageOf(error) })
+      errorOwner = 'save'
+      store.setState({ error: messageOf(error) })
       throw error
+    } finally {
+      pendingSaves = Math.max(0, pendingSaves - 1)
+      store.setState({ saving: pendingSaves > 0 })
     }
   }
 
@@ -224,41 +317,80 @@ export function createRowController(scope: SettingsScopeLike<RowConfig> | undefi
   }
 
   const discover = async (): Promise<void> => {
+    const sequence = ++discoverSequence
+    errorOwner = undefined
     store.setState({ discovering: true, error: undefined, notice: undefined })
     const { config } = store.getState()
     try {
-      const result = await fetchDiscover(config.bashPath, config.msystem)
-      if (disposed) return
+      const result = await fetchDiscover(config.bashPath)
+      if (disposed || sequence !== discoverSequence) return
+      if (typeof result !== 'object' || result === null
+        || !Array.isArray(result.candidates) || !result.candidates.every(isProfile)
+        || !Array.isArray(result.notes)
+        || (result.recommended !== undefined && !isProfile(result.recommended))) {
+        throw new Error('unexpected /discover response')
+      }
       store.setState({
         discovering: false,
         discovered: true,
         candidates: result.candidates,
         ...result.recommended !== undefined ? { recommended: result.recommended } : { recommended: undefined },
-        ...result.notes.length > 0 ? { notice: result.notes.join('; ') } : {},
+        notice: result.notes.length > 0 ? result.notes.join('; ') : undefined,
       })
       // Pick up a newly discovered effective profile as well as the candidate
       // list; Refresh should leave the badge and diagnostics in sync.
       await refresh()
     } catch (error) {
-      if (disposed) return
+      if (disposed || sequence !== discoverSequence) return
+      errorOwner = 'discover'
       store.setState({ discovering: false, error: messageOf(error) })
     }
   }
 
-  const validate = async (): Promise<void> => {
+  const validate = async (override?: string): Promise<void> => {
+    const sequence = ++validateSequence
+    errorOwner = undefined
     store.setState({ validating: true, error: undefined, notice: undefined })
     const { config } = store.getState()
-    const path = config.bashPath.length > 0 ? config.bashPath : store.getState().effective?.path ?? ''
+    const draft = override === undefined ? '' : stripMatchingQuotes(override).trim()
+    const path = draft.length > 0
+      ? draft
+      : config.bashPath.length > 0
+        ? config.bashPath
+        : store.getState().effective?.path ?? ''
+    // Compare with the same separator/case normalization the selector uses.
+    // In auto mode the effective path is the configured one, not a draft.
+    const normalize = (value: string): string => value.replaceAll('/', '\\').toLowerCase()
+    const configuredPath = config.bashPath.length > 0
+      ? config.bashPath
+      : store.getState().effective?.path ?? ''
+    const saved = normalize(path) === normalize(configuredPath)
+    // Apply always resets msystem to auto when it saves a manual path; Test must
+    // do the same for a draft, or a cross-family draft reports a false failure.
+    const msystemForTest = saved ? config.msystem : 'auto'
     try {
-      const result = await fetchValidate(path, config.msystem)
-      if (disposed) return
+      const result = await fetchValidate(path, msystemForTest)
+      if (disposed || sequence !== validateSequence) return
+      if (typeof result !== 'object' || result === null) throw new Error('unexpected /validate response')
       if (result.problem !== undefined) {
-        store.setState({ validating: false, error: result.problem, effective: undefined })
+        if (typeof result.problem !== 'string') throw new Error('unexpected /validate response')
+        errorOwner = 'validate'
+        store.setState({
+          validating: false,
+          error: result.problem,
+          ...saved ? { effective: undefined } : {},
+        })
       } else {
-        store.setState({ validating: false, effective: result.profile, notice: 'bash --version OK' })
+        if (result.profile !== undefined && !isProfile(result.profile)) throw new Error('unexpected /validate response')
+        store.setState({
+          validating: false,
+          ...saved ? { effective: result.profile, problem: undefined } : {},
+          notice: saved ? NOTICE_VERSION_OK : NOTICE_VERSION_OK_UNSAVED,
+        })
       }
     } catch (error) {
-      if (disposed) return
+      if (disposed || sequence !== validateSequence) return
+      errorOwner = 'validate'
       store.setState({ validating: false, error: messageOf(error) })
     }
   }
@@ -284,6 +416,12 @@ export function createRowController(scope: SettingsScopeLike<RowConfig> | undefi
 }
 
 function messageOf(error: unknown): string {
+  // Duck-type across realms: a browser fetch rejection and a vm/test error have
+  // different Error prototypes, but the message is still the useful part.
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === 'string' && message.length > 0) return message
+  }
   return error instanceof Error && error.message.length > 0 ? error.message : String(error)
 }
 

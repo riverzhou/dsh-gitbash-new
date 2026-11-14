@@ -3,12 +3,12 @@
  *
  * A third-party plugin cannot import `@deepseek-ai/dsh-error`, so the tool
  * registry's `error instanceof HarnessError` check never records `error.info`
- * for one of these failures. The visible message and the `name`/`code` fields
- * still match the official class (ToolArgsError, JobError, …), so a developer
- * reading a diagnostic sees the same identity DSH documents, and a future
- * duck-typed check would accept it unchanged.
+ * for one of these failures: DSH persists only the message. The `name`/`code`
+ * fields still match the official class (ToolArgsError/ToolContextUnavailable/
+ * SandboxEscalationError) for diagnostics, unit assertions, and any future
+ * duck-typed recorder; they are not a claim that `tool/result.error.info` exists.
  *
- * `scripts/compatcheck.mjs` asserts every mirrored name/code against the
+ * `scripts/compatcheck.mjs` asserts the official messages/codes against the
  * deployed runtime bundles.
  */
 
@@ -19,10 +19,6 @@ export const INVALID_ARGS = 'INVALID_ARGS'
 /** A tool body whose composition lacks required call context. */
 export const TOOL_CONTEXT_UNAVAILABLE_ERROR = 'ToolContextUnavailableError'
 export const TOOL_CONTEXT_UNAVAILABLE = 'TOOL_CONTEXT_UNAVAILABLE'
-
-/** A background-job refusal raised by the job runtime. */
-export const JOB_ERROR = 'JobError'
-export const JOB_BACKGROUND_DISABLED = 'JOB_BACKGROUND_DISABLED'
 
 /** A `sandbox_permissions` request that produced no grant; nothing executed. */
 export const SANDBOX_ESCALATION_ERROR = 'SandboxEscalationError'
@@ -73,15 +69,6 @@ export function toolArgsError(violations: readonly string[]): Error {
  */
 export function toolContextUnavailableError(message: string): Error {
   return errorWithIdentity(TOOL_CONTEXT_UNAVAILABLE_ERROR, TOOL_CONTEXT_UNAVAILABLE, message)
-}
-
-/**
- * Build a background-job refusal.
- * @param message - the model-facing explanation and safe next step.
- * @param code - the closed job failure code.
- */
-export function jobError(message: string, code: string): Error {
-  return errorWithIdentity(JOB_ERROR, code, message)
 }
 
 /**

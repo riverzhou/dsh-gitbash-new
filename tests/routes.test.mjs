@@ -16,12 +16,14 @@ const profile = {
 }
 
 const settings = { bashPath: '', msystem: 'auto', compat: 'auto' }
+const discovered = { candidates: [profile], recommended: profile, notes: [] }
 const cache = {
-  get: () => ({ candidates: [profile], recommended: profile, notes: [] }),
+  get: () => discovered,
+  peek: () => discovered,
   refresh: () => ({ candidates: [profile], recommended: profile, notes: ['scanned'] }),
 }
 
-function harness(overrideSettings = settings) {
+function harness(overrideSettings = settings, overrideCache = cache) {
   const routes = []
   const ctx = {
     get(name) {
@@ -33,9 +35,9 @@ function harness(overrideSettings = settings) {
   }
   registerRoutes(ctx, {
     readSettings: () => overrideSettings,
-    cache,
+    cache: overrideCache,
     settingsAvailable: () => true,
-    capability: () => ({ supported: true, backgroundJobs: true, bashAvailable: true, shellSandboxMode: 'workspace-write' }),
+    capability: bashAvailable => ({ supported: true, backgroundJobs: true, bashAvailable, shellSandboxMode: 'workspace-write' }),
     lastReplace: () => ({ at: 1, applied: true }),
   })
   return { routes, ctx }
@@ -57,6 +59,7 @@ test('state returns settings, effective profile and capability', async () => {
   assert.equal(body.effective.path, 'C:\\Git\\bin\\bash.exe')
   assert.equal(body.candidates.length, 1)
   assert.equal(body.capability.shellSandboxMode, 'workspace-write')
+  assert.equal(body.capability.bashAvailable, true)
   assert.equal(body.lastReplace.applied, true)
 })
 
@@ -103,4 +106,22 @@ test('a throwing ctx.get does not break route registration', () => {
     capability: () => ({ supported: true, backgroundJobs: true, bashAvailable: true }),
     lastReplace: () => undefined,
   }))
+})
+
+test('a cold /state does not scan and reports bash unavailable consistently', async () => {
+  let scans = 0
+  const cold = {
+    get() { scans += 1; return discovered },
+    peek() { return undefined },
+    refresh() { scans += 1; return discovered },
+  }
+  const { routes } = harness(settings, cold)
+  const state = routes.find(route => route.path === ROUTE_STATE)
+  const response = await state.fetch(new Request('http://x/', { method: 'POST', body: '{}' }))
+  const body = await response.json()
+  assert.equal(response.status, 200)
+  assert.equal(scans, 0)
+  assert.deepEqual(body.candidates, [])
+  assert.equal(body.capability.bashAvailable, false)
+  assert.match(body.problem, /discovery has not completed/)
 })

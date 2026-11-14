@@ -6,7 +6,7 @@
  * platform constraint and the security model.
  */
 import { Config, readSettings } from './host/settings.ts'
-import { createDiscoveryCache, resolveEffectiveProfile } from './host/discover.ts'
+import { createDiscoveryCache } from './host/discover.ts'
 import { registerReplacement } from './host/replace.ts'
 import { registerRoutes } from './host/routes.ts'
 import { diag, diagFile } from './host/diag.ts'
@@ -86,11 +86,10 @@ export function apply(ctx: HostContextLike, config?: unknown): void {
     diag(`discover: scan failed: ${messageOf(error)}`)
   }
 
-  const capability = (): CapabilityView => {
-    const base = probeDeploymentCapability(ctx)
-    const resolved = resolveEffectiveProfile(settingsForSession(), cache, false)
-    return { ...base, bashAvailable: resolved.profile !== undefined }
-  }
+  const capability = (bashAvailable: boolean): CapabilityView => ({
+    ...probeDeploymentCapability(ctx),
+    bashAvailable,
+  })
 
   registerRoutes(ctx, {
     readSettings: settingsForSession,

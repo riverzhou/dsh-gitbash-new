@@ -8,7 +8,7 @@
 
 本文是完整使用手册：安装、日常用法、安全边界、设置、排障与开发。
 
-> **最低 DSH：0.2.2。** 仅 Windows 10/11。替换只对**新会话**生效；已存在的会话
+> **最低 DSH：0.2.2-rc.3。** 仅 Windows 10/11。替换只对**新会话**生效；已存在的会话
 > 保持创建时的工具目录。
 
 ---
@@ -61,12 +61,13 @@
 - **显式安全**：绝不静默放宽权限——`workspace-write` 下以完全访问运行并在结果里
   标注 `[compat: ...]`，`read-only` 拒绝，`strict` 只允许 `danger-full-access`。
   详见[安全边界](#安全边界先读)。
-- **已验证**：111 个单元/集成用例，加上 DSH `0.2.2-rc.3` 上的 Git 与 MSYS2 真机
-  冒烟（直连、promote、后台、子智能体；0.2.4 审计轮 31/31 场景检查 + 15/15
-  设置页检查，含 strict 实机拒绝；0.2.5 手动路径 UI 流程 13/13；0.2.6 的
-  read-only 拒绝、审批允许/拒绝、恶意 `BASH_ENV`/导出函数清除、大输出 spill、
-  job kill 与干净最终设置行；0.2.7 在 rc.3 上复验 settings route、40 工具目录、
-  MSYS2 bash/compat、后台、promote 与 `invalid arguments:` 错误文本）。
+- **已验证**：136 个单元/集成用例，加上 DSH `0.2.2-rc.3` 真机（MSYS2：settings
+  route、真实设置行 light/dark、40 工具目录、直连/promote/后台、
+  `invalid arguments:` 文本），以及更早 DSH `0.2.2-rc.1` 上的 Git/MSYS2 冒烟
+  （直连、promote、后台、子智能体；0.2.4 审计轮 31/31 场景检查 + 15/15 设置页
+  检查，含 strict 实机拒绝；0.2.5 手动路径 UI 流程 13/13；0.2.6 的 read-only
+  拒绝、审批允许/拒绝、恶意 `BASH_ENV`/导出函数清除、大输出 spill、job kill）。
+  0.2.8 是完整审计轮，并更新了 light/dark 截图。
 
 ---
 
@@ -77,7 +78,7 @@
 | DSH | `>= 0.2.2-rc.3`（已在桌面运行时 `0.2.2-rc.3` 实测） |
 | Windows | Windows 10/11 x64；MSYS2 arm64 环境也可用 |
 | bash 提供方 | Git for Windows 和/或 MSYS2 |
-| Node.js | `>= 24.9`，仅构建/开发需要（DSH 0.2.2 的工作区下限） |
+| Node.js | `>= 24.9`，仅构建/开发需要（DSH 0.2.2-rc.3 的工作区下限） |
 | 可选 | Cygwin，best-effort，不推荐 |
 
 - Git Bash 与 MSYS2 共用 MSYS2 运行时；该运行时无法在 DSH 的 Windows ACL 沙箱中
@@ -92,7 +93,7 @@
 
 ### 使用 DSH Desktop 自带的 CLI
 
-**不要**用 npm 全局的旧 `dsh`（例如 `0.1.7`），它不认识 0.2.2 的
+**不要**用 npm 全局的旧 `dsh`（例如 `0.1.7`），它不认识 0.2.2-rc.3 的
 plugin/profile 契约。使用桌面安装目录里的 CLI：
 
 ```bat
@@ -120,7 +121,7 @@ set "DSH_CLI=%LOCALAPPDATA%\Programs\DeepSeek Harness\resources\runtime\cli\bin\
 ### 从 npm 安装（已发布）
 
 ```bat
-%DSH_CLI% plugin --profile desktop add @riverzh/dsh-gitbash@0.2.7
+%DSH_CLI% plugin --profile desktop add @riverzh/dsh-gitbash@0.2.8
 ```
 
 最新版可用 `@riverzh/dsh-gitbash@latest`。
@@ -167,12 +168,14 @@ set "DSH_CLI=%LOCALAPPDATA%\Programs\DeepSeek Harness\resources\runtime\cli\bin\
    *“用 bash 打印 shell、cwd 和 git status。”*
 6. 确认模型调用的是 `bash`（不是 `pwsh`），结果的 cwd 正确。
 
-设置页长这样：
+设置页长这样（DSH `0.2.2-rc.3`，2026-11-14）：
 
-![设置页：终端工具](docs/images/settings-row-0.2.5.png)
+![设置页，深色主题](docs/images/settings-row-0.2.8-dark.png)
+![设置页，浅色主题](docs/images/settings-row-0.2.8-light.png)
 
-Shell、兼容模式和 MSYS2 环境下拉都跟随 DSH 的浅色/深色 surface token，闭控件和
-展开列表都保持可读：
+Shell、兼容模式和 MSYS2 环境控件都跟随 DSH 的浅色/深色 surface token，闭控件和
+展开的原生列表都保持可读。下面的展开列表截图来自最初的主题修复（DSH `0.2.1`）；
+0.2.8 使用相同的 token 与控件：
 
 ![深色主题下的 Shell 下拉](docs/images/settings-dropdown-dark.png)
 ![浅色主题下的 Shell 下拉](docs/images/settings-dropdown-light.png)
@@ -442,7 +445,7 @@ WSL 一律排除：`System32\bash.exe`、`Sysnative`、`WindowsApps`、`\\wsl$`�
 | 现象 | 处理 |
 |---|---|
 | 设置页说没找到 bash | 安装 Git for Windows 或 MSYS2；点 **刷新**；或手填 `<root>\usr\bin\bash.exe`（不要加引号） |
-| 新会话仍有 `pwsh` | 确认 DSH `>= 0.2.2`、插件在 profile bundles 里、DSH 已重启；看 `%TEMP%\dsh-gitbash.log` 的 `replace:` |
+| 新会话仍有 `pwsh` | 确认 DSH `>= 0.2.2-rc.3`、插件在 profile bundles 里、DSH 已重启；看 `%TEMP%\dsh-gitbash.log` 的 `replace:` |
 | 只有旧会话没有 bash | 替换按 agent 生效；新建会话。子代理从父会话继承 |
 | Git 会话显示 `MSYSTEM=UCRT64` | 旧 `bin\bash.exe` 路径/旧构建；用自动/刷新；当前构建会归一化到 `usr\bin\bash.exe` |
 | MSYS2 环境不存在 | 在 MSYS2 里安装该环境；profile 只列出 `bin` 存在的环境 |
@@ -472,8 +475,10 @@ WSL 一律排除：`System32\bash.exe`、`Sysnative`、`WindowsApps`、`\\wsl$`�
   子智能体卡片的最终依据。
 - **契约核对**：`pnpm compatcheck` 读取已安装运行时版本、执行插件的
   `engines.dsh` 下限，并对比部署的官方 Host / Client bundle 与本插件依赖的字符串，
-  含 0.2.2-rc.3 的 `ToolArgsError` / `JobError` / `SubprocessError` /
-  `WorkingDirectoryError` / `ShellEnvError` 消息与 code。
+  含 0.2.2-rc.3 的 `ToolArgsError` / `ToolContextUnavailableError` /
+  `SandboxEscalationError` / `WorkingDirectoryError` / `ShellEnvError` 消息与
+  官方 `JobError` / `SubprocessError` code 列表。发布前用
+  `node scripts/compatcheck.mjs --require`（缺少 `app.asar` 时默认 skip 并 exit 0）。
 
 完整的真机原始事件见 [docs/SMOKE.md](docs/SMOKE.md)。
 
@@ -500,9 +505,11 @@ WSL 一律排除：`System32\bash.exe`、`Sysnative`、`WindowsApps`、`\\wsl$`�
   `cordis.patch.yml` 再在 `process.platform !== 'win32'` 时禁用 entry。
 
 **2026-11-14 真机验证**：DSH `0.2.2-rc.3`（桌面运行时）+ `gitbash-uitest`
-profile：settings route、40 工具目录（有 `bash`、无 `pwsh`）、真实 MSYS2
-UCRT64 bash 调用（compat 尾注 + `meta.cwd`）、后台任务、超时 promote，以及
-`Error: invalid arguments: ...` 文本均已跑过。此前在 DSH `0.2.2-rc.1` 上的
+profile：settings route 与真实 light/dark 设置行、40 工具目录（有 `bash`、
+无 `pwsh`）、真实 MSYS2 UCRT64 bash 调用（compat 尾注 + `meta.cwd`）、
+后台任务、超时 promote，以及 `Error: invalid arguments: ...` 文本均已跑过；
+0.2.8 审计还加入了 client/host 回归测试和 CHANGELOG 列出的加固。此前在
+DSH `0.2.2-rc.1` 上的
 Git、子智能体、SIGTERM 归一化、相对 workdir、strict 拒绝与真实设置行
 （31/31 场景检查 + 15/15 UI 检查）仍是有效证据；0.2.5 通过真实 UI 跑了
 13/13 手动路径流程（MSYS2 → Git）；0.2.6 新增 read-only 拒绝、审批允许/拒绝、
@@ -518,10 +525,14 @@ workspace-write 提权标注、108 KB 尾部/spill、实机 `job_kill`、`/tmp` 
 pnpm install
 pnpm build        # lib/index.js + lib/client.js
 pnpm check        # tsc --noEmit
-pnpm test         # node:test；111 个用例，含真实 Git/MSYS2（存在时）
+pnpm test         # node:test；136 个用例，含真实 Git/MSYS2（存在时）
 pnpm selftest     # 纯逻辑自测，不需要 DSH
 pnpm compatcheck  # 对已安装 DSH 做契约字符串核对
 ```
+
+这些命令需要 checkout：npm 发布包只带运行文件与文档，不带 `tests/`、`scripts/`。
+发布门禁用 `node scripts/compatcheck.mjs --require`，缺少 `app.asar` 时失败而不是
+skip。
 
 真实集成测试会自动发现本机 Git/MSYS2；没有时跳过。覆盖 `MSYSTEM`、PATH 隔离、
 退出码、stderr、真实子 bash、超时、真实 `SIGTERM`/`SIGKILL` 编码、可选的 MSYS2

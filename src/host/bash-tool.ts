@@ -146,7 +146,7 @@ function readString(raw: Record<string, unknown>, key: string, violations: strin
  * `ToolArgsError` violations (and their schema-walk order) itself. That keeps
  * the model-facing text identical to the official `bash` tool on rc.3.
  */
-function parseArgs(raw: Record<string, unknown>): BashArgs {
+function parseArgs(raw: Record<string, unknown>, escalationTargets: readonly SandboxMode[]): BashArgs {
   const violations: string[] = []
   // Required checks come before property type checks in the dispatcher walk.
   for (const key of ['description', 'command'] as const) {
@@ -167,6 +167,12 @@ function parseArgs(raw: Record<string, unknown>): BashArgs {
     violations.push('"run_in_background" must be a boolean')
   }
   const sandboxPermissions = readString(values, 'sandbox_permissions', violations)
+  // The official schema's enum is enforced by defineTool; this raw-schema tool
+  // must enforce it itself when the composition advertises the field.
+  if (sandboxPermissions !== undefined && escalationTargets.length > 0
+    && !escalationTargets.includes(sandboxPermissions as SandboxMode)) {
+    violations.push(`"sandbox_permissions" must be one of ${JSON.stringify([...escalationTargets])}`)
+  }
   const justification = readString(values, 'justification', violations)
   if (violations.length > 0) throw toolArgsError(violations)
   return {
@@ -386,7 +392,9 @@ function presentResult(args: unknown, result: ToolResultLike): ToolResultViewLik
   const parsed = parseExitStatus(raw)
   const view: TerminalResultViewLike = 'signal' in parsed
     ? { card: 'terminal', output: parsed.body, signal: parsed.signal }
-    : 'unavailable' in parsed
+    : parsed.exitCode === null
+      // The terminal view's exitCode is a number; an explicit null exit is
+      // rendered as a pill-less terminal (the Web card shows "no exit code").
       ? { card: 'terminal', output: parsed.body }
       : { card: 'terminal', output: parsed.body, exitCode: parsed.exitCode }
   return view
@@ -506,9 +514,14 @@ export function createBashTool(runtime: BashToolRuntime): ToolDefinitionLike {
     }
   }
 
-  const stopJob = async (registry: JobRegistryLike, id: string, owner: string | undefined): Promise<JobViewLike> => {
+  const stopJob = async (
+    registry: JobRegistryLike,
+    id: string,
+    owner: string | undefined,
+    reason: string,
+  ): Promise<JobViewLike> => {
     try {
-      registry.kill(id, owner, 'tool call aborted')
+      registry.kill(id, owner, reason)
     } catch {
       // The job may already be gone; the wait below decides its state.
     }
@@ -541,13 +554,13 @@ export function createBashTool(runtime: BashToolRuntime): ToolDefinitionLike {
     try {
       view = await registry.wait(attached.id, timeoutMs, owner, exec.signal)
     } catch (error) {
-      await stopJob(registry, attached.id, owner)
+      await stopJob(registry, attached.id, owner, 'tool call aborted')
       if (exec.signal.aborted || (error instanceof Error && error.name === 'AbortError')) throw toolAborted()
       throw error instanceof Error ? error : new Error(String(error))
     }
     if (view.status === 'running' || view.status === 'stopping') {
       if (attached.process() === undefined) {
-        await stopJob(registry, attached.id, owner)
+        await stopJob(registry, attached.id, owner, 'timed out during preparation')
         const synthetic: ForegroundValue = {
           kind: 'foreground',
           cwd,
@@ -563,12 +576,9 @@ export function createBashTool(runtime: BashToolRuntime): ToolDefinitionLike {
         }
         return synthetic
       }
-      let read: JobReadLike
-      try {
-        read = registry.read(attached.id, owner)
-      } catch {
-        read = { chunks: [], lossy: false, job: view }
-      }
+      // A consuming read can race an external removal; report that error
+      // instead of fabricating an empty "still running" result.
+      const read: JobReadLike = registry.read(attached.id, owner)
       const output = ringDelta(read.chunks)
       const lossy = read.lossy
       const spill = read.job.output.spillPaths ?? []
@@ -629,10 +639,22 @@ export function createBashTool(runtime: BashToolRuntime): ToolDefinitionLike {
       },
     },
     async execute(rawArgs: Record<string, unknown>, exec: ToolExecutionLike): Promise<BashValue> {
-      const args = parseArgs(rawArgs)
+      const args = parseArgs(rawArgs, escalationModes)
       const standingPolicy = resolvePolicy(exec)
       const standingMode: SandboxMode = standingPolicy.mode
       validateBashArgs(args, standingMode)
+      // Strict compatibility cannot honor a workspace-write grant. Intercept
+      // only a genuine escalation from read-only with the field advertised;
+      // a narrowing request keeps the official SandboxEscalationError, and a
+      // same-mode request reaches the ordinary strict refusal below.
+      if (runtime.compat === 'strict' && standingMode === 'read-only'
+        && escalationModes.length > 0 && args.sandbox_permissions === 'workspace-write') {
+        throw new Error(
+          'bash cannot honor a workspace-write grant in strict compatibility mode: the MSYS2 runtime is blocked by the Windows file sandbox. '
+          + 'Retry with sandbox_permissions: "danger-full-access" plus a justification, '
+          + 'or set Settings → General → Terminal tool → Compatibility to auto and use a workspace-write session.',
+        )
+      }
       let approvedMode: SandboxMode | undefined
       // The composition guard belongs to the paired request only, exactly as
       // the official tool: repeating the effective mode needs no escalation
@@ -655,20 +677,27 @@ export function createBashTool(runtime: BashToolRuntime): ToolDefinitionLike {
         )
       }
       const mode = approvedMode ?? standingMode
+      const retryAdvice = escalationModes.length === 0
+        ? 'This composition does not advertise sandbox escalation.'
+        : runtime.compat === 'strict'
+          ? 'Retry with sandbox_permissions: "danger-full-access" plus a justification.'
+          : 'Retry with sandbox_permissions: "workspace-write"/"danger-full-access" plus a justification.'
       let compat = false
       let sessionMode: string | undefined
       if (mode === 'read-only') {
         throw new Error(
           'bash cannot run in a read-only session: the Windows sandbox cannot start the MSYS2 runtime, and running unconfined would break the read-only promise. '
-          + 'Switch the session permission to workspace-write (compatibility mode) or danger-full-access, or retry with sandbox_permissions: "workspace-write"/"danger-full-access" plus a justification.',
+          + 'Switch the session permission to '
+          + (runtime.compat === 'strict' ? 'danger-full-access.' : 'workspace-write (compatibility mode) or danger-full-access.')
+          + ' ' + retryAdvice,
         )
       }
       if (mode === 'workspace-write') {
         if (runtime.compat === 'strict') {
           throw new Error(
             'bash cannot run under the Windows file sandbox: the MSYS2 runtime is blocked by the restricted token. '
-            + 'This deployment is in strict compatibility mode. Set Settings → General → Terminal tool → Compatibility to auto, switch the session to danger-full-access, '
-            + 'or retry with sandbox_permissions: "danger-full-access" plus a one-sentence justification.',
+            + 'This deployment is in strict compatibility mode. Set Settings → General → Terminal tool → Compatibility to auto, or switch the session to danger-full-access. '
+            + retryAdvice,
           )
         }
         compat = true

@@ -15,9 +15,9 @@ import {
   type CSSProperties,
   type ReactElement,
 } from 'react'
-import { createRowController, type RowConfig } from './store.ts'
+import { createRowController, NOTICE_VERSION_OK, NOTICE_VERSION_OK_UNSAVED, type RowConfig } from './store.ts'
 import type { SettingsScopeLike, Translate } from './types.ts'
-import { COMPAT_MODES, MSYSTEM_SETTINGS } from '../shared/protocol.ts'
+import { COMPAT_MODES, MSYSTEM_SETTINGS, stripMatchingQuotes } from '../shared/protocol.ts'
 import type { BashProfileView, MsystemSetting } from '../shared/protocol.ts'
 
 export interface TerminalToolRowProps {
@@ -37,7 +37,7 @@ const styles: Record<string, CSSProperties> = {
     gap: 8,
     fontSize: 13,
   },
-  header: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 },
+  header: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' },
   title: { fontWeight: 600, fontSize: 14 },
   subtitle: { opacity: 0.65, lineHeight: 1.4, fontSize: 12 },
   row: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
@@ -97,6 +97,7 @@ const styles: Record<string, CSSProperties> = {
     padding: '5px 8px',
     lineHeight: 1.45,
     fontSize: 12,
+    color: 'var(--dsw-alias-state-error-primary, #e5484d)',
   },
   strict: {
     border: '1px solid color-mix(in srgb, #f5a623 40%, transparent)',
@@ -107,7 +108,8 @@ const styles: Record<string, CSSProperties> = {
     fontSize: 12,
   },
   muted: { opacity: 0.65, fontSize: 12 },
-  error: { color: '#e5484d', fontSize: 12, lineHeight: 1.45 },
+  error: { color: 'var(--dsw-alias-state-error-primary, #e5484d)', fontSize: 12, lineHeight: 1.45 },
+  notice: { fontSize: 12, lineHeight: 1.45, opacity: 0.8 },
   badge: {
     border: '1px solid color-mix(in srgb, currentColor 20%, transparent)',
     borderRadius: 999,
@@ -115,11 +117,15 @@ const styles: Record<string, CSSProperties> = {
     fontSize: 11,
     opacity: 0.85,
     whiteSpace: 'nowrap',
+    maxWidth: '55%',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    flexShrink: 1,
   },
   summary: { cursor: 'pointer', opacity: 0.75, fontSize: 12 },
   detailsBody: { display: 'grid', gap: 8, paddingTop: 8 },
-  status: { display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '1px 10px', fontSize: 11, opacity: 0.8 },
-  code: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' },
+  status: { display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', gap: '1px 10px', fontSize: 11, opacity: 0.8, minWidth: 0 },
+  code: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', overflowWrap: 'anywhere', minWidth: 0 },
 }
 
 /** Profile label for the selector: the host label plus the probed version. */
@@ -145,7 +151,10 @@ export function TerminalToolRow({ t, scope }: TerminalToolRowProps): ReactElemen
     setDraftPath(state.config.bashPath)
   }, [state.config.bashPath])
 
-  const disabled = !state.writable || state.saving || state.discovering
+  const scopeReady = state.scopeStatus === 'ready'
+  // A form whose namespace is not served reports the document's writable flag
+  // but rejects every write; do not look editable in that state.
+  const disabled = !scopeReady || !state.writable || state.saving || state.discovering || state.validating
   const compat = state.config.compat
   const candidates = state.candidates
   const matched = state.config.bashPath.length === 0
@@ -176,11 +185,22 @@ export function TerminalToolRow({ t, scope }: TerminalToolRowProps): ReactElemen
    * would make a newly entered Git path invalid, and vice versa.
    */
   const applyManualPath = (): void => {
-    const next = draftPath.trim()
+    const next = stripMatchingQuotes(draftPath)
     void controller.setConfig(next !== state.config.bashPath
       ? { bashPath: next, msystem: 'auto' }
       : { bashPath: next })
   }
+
+  const notice = state.notice === NOTICE_VERSION_OK
+    ? t('noticeVersionOk')
+    : state.notice === NOTICE_VERSION_OK_UNSAVED
+      ? t('noticeVersionOkUnsaved')
+      : state.notice
+  const scopeProblem = state.scopeStatus === 'unavailable'
+    ? scope === undefined ? t('unavailable') : t('namespaceUnavailable')
+    : state.scopeStatus === 'loading'
+      ? t('namespaceLoading')
+      : !state.writable ? t('readOnly') : undefined
 
   return (
     <div style={styles.card}>
@@ -194,7 +214,7 @@ export function TerminalToolRow({ t, scope }: TerminalToolRowProps): ReactElemen
         </span>
       </div>
 
-      {!state.writable ? <div style={styles.muted}>{state.scopeStatus === 'unavailable' ? t('unavailable') : t('readOnly')}</div> : null}
+      {scopeProblem !== undefined ? <div style={styles.muted}>{scopeProblem}</div> : null}
       {!state.capability.supported && state.capability.reason !== undefined
         ? <div style={styles.error}>{t('unsupported')}{state.capability.reason}</div>
         : null}
@@ -205,6 +225,7 @@ export function TerminalToolRow({ t, scope }: TerminalToolRowProps): ReactElemen
           style={styles.select}
           value={selectedValue}
           disabled={disabled}
+          aria-label={t('shell')}
           onChange={event => choose(event.target.value)}
         >
           <option value={AUTO} style={styles.option}>{t('autoRecommended')}</option>
@@ -215,7 +236,12 @@ export function TerminalToolRow({ t, scope }: TerminalToolRowProps): ReactElemen
           ))}
           {selectedValue === MANUAL ? <option value={MANUAL} style={styles.option}>{t('manualPath')}: {state.config.bashPath}</option> : null}
         </select>
-        <button style={styles.button} disabled={disabled} onClick={() => void controller.discover()}>
+        <button
+          style={styles.button}
+          disabled={disabled}
+          aria-busy={state.discovering}
+          onClick={() => void controller.discover()}
+        >
           {state.discovering ? t('refreshing') : t('refresh')}
         </button>
       </div>
@@ -225,7 +251,8 @@ export function TerminalToolRow({ t, scope }: TerminalToolRowProps): ReactElemen
         <select
           style={styles.select}
           value={compat}
-          disabled={!state.writable || state.saving}
+          disabled={!scopeReady || !state.writable || state.saving || state.validating}
+          aria-label={t('compat')}
           onChange={event => void controller.setConfig({ compat: event.target.value as RowConfig['compat'] })}
         >
           {COMPAT_MODES.map(mode => (
@@ -244,7 +271,7 @@ export function TerminalToolRow({ t, scope }: TerminalToolRowProps): ReactElemen
       </div>
 
       {state.error !== undefined || state.problem !== undefined
-        ? <div style={styles.error}>{state.error ?? state.problem}</div>
+        ? <div style={styles.error} role="alert" aria-live="assertive">{state.error ?? state.problem}</div>
         : null}
 
       <details
@@ -260,8 +287,9 @@ export function TerminalToolRow({ t, scope }: TerminalToolRowProps): ReactElemen
               style={styles.input}
               value={draftPath}
               placeholder={t('pathPlaceholder')}
+              aria-label={t('pathLabel')}
               spellCheck={false}
-              disabled={!state.writable || state.saving}
+              disabled={!scopeReady || !state.writable || state.saving || state.validating}
               onChange={event => setDraftPath(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') applyManualPath()
@@ -273,7 +301,12 @@ export function TerminalToolRow({ t, scope }: TerminalToolRowProps): ReactElemen
             <button style={styles.button} disabled={disabled} onClick={() => void controller.resetAuto()}>
               {t('reset')}
             </button>
-            <button style={styles.button} disabled={disabled || state.validating} onClick={() => void controller.validate()}>
+            <button
+              style={styles.button}
+              disabled={disabled}
+              aria-busy={state.validating}
+              onClick={() => void controller.validate(draftPath)}
+            >
               {state.validating ? t('testing') : t('test')}
             </button>
           </div>
@@ -283,7 +316,8 @@ export function TerminalToolRow({ t, scope }: TerminalToolRowProps): ReactElemen
             <select
               style={styles.select}
               value={state.config.msystem}
-              disabled={!state.writable || state.saving || state.effective?.flavor === 'git'}
+              disabled={!scopeReady || !state.writable || state.saving || state.validating || state.effective?.flavor === 'git'}
+              aria-label={t('msystem')}
               onChange={event => void controller.setConfig({ msystem: event.target.value as MsystemSetting })}
             >
               {MSYSTEM_SETTINGS.map(option => (
@@ -305,7 +339,9 @@ export function TerminalToolRow({ t, scope }: TerminalToolRowProps): ReactElemen
             </span>
           </div>
 
-          {state.notice !== undefined && state.error === undefined ? <div style={styles.muted}>{state.notice}</div> : null}
+          {notice !== undefined && state.error === undefined && state.problem === undefined
+            ? <div style={styles.notice} role="status" aria-live="polite">{notice}</div>
+            : null}
         </div>
       </details>
     </div>

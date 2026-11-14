@@ -341,10 +341,47 @@ export function profileFromPath(
   return { profile: makeProfile('msys2', root, trimmed, selected, probe) }
 }
 
+/**
+ * System tools run with an absolute path and a minimal environment.
+ *
+ * A bare `where.exe` / `reg.exe` is resolved through the Windows search order,
+ * which can prefer the current directory (a writable workspace) over System32;
+ * inheriting `process.env` would then hand the host's credentials to whatever
+ * executable won that search. These tools need only their Windows paths and the
+ * search PATH, never the DSH/API environment.
+ */
+function systemToolEnv(): NodeJS.ProcessEnv {
+  const root = systemRoot()
+  return {
+    SystemRoot: root,
+    SystemDrive: process.env.SystemDrive ?? root.slice(0, 2),
+    WINDIR: root,
+    PATH: process.env.PATH ?? process.env.Path ?? winJoin(root, 'System32'),
+    PATHEXT: process.env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD',
+    ...process.env.TEMP !== undefined ? { TEMP: process.env.TEMP } : {},
+    ...process.env.TMP !== undefined ? { TMP: process.env.TMP } : {},
+  }
+}
+
+/** Windows directory, without a hard-coded literal separator. */
+function systemRoot(): string {
+  return process.env.SystemRoot ?? process.env.windir ?? winJoin(process.env.SystemDrive ?? 'C:', 'Windows')
+}
+
+/** Absolute path of a Windows system tool. */
+function systemTool(name: string): string {
+  return winJoin(systemRoot(), 'System32', name)
+}
+
 /** `where.exe` output lines that look like absolute paths. */
 function wherePaths(name: string): string[] {
   try {
-    const result = spawnSync('where.exe', [name], { timeout: 2000, windowsHide: true, encoding: 'utf8' })
+    const result = spawnSync(systemTool('where.exe'), [name], {
+      timeout: 2000,
+      windowsHide: true,
+      encoding: 'utf8',
+      env: systemToolEnv(),
+    })
     if (result.status !== 0 || typeof result.stdout !== 'string') return []
     return result.stdout.split(/\r?\n/).map(line => line.trim()).filter(line => /^[a-zA-Z]:\\/.test(line))
   } catch {
@@ -357,10 +394,11 @@ function registryGitRoots(): string[] {
   const roots: string[] = []
   for (const key of ['HKLM\\SOFTWARE\\GitForWindows', 'HKCU\\SOFTWARE\\GitForWindows']) {
     try {
-      const result = spawnSync('reg.exe', ['query', key, '/v', 'InstallPath'], {
+      const result = spawnSync(systemTool('reg.exe'), ['query', key, '/v', 'InstallPath'], {
         timeout: 2000,
         windowsHide: true,
         encoding: 'utf8',
+        env: systemToolEnv(),
       })
       if (result.status !== 0 || typeof result.stdout !== 'string') continue
       const match = /InstallPath\s+REG_SZ\s+(.+)/i.exec(result.stdout)
@@ -409,6 +447,11 @@ function rootsFromPath(env: NodeJS.ProcessEnv): string[] {
   for (const entry of path.split(';')) {
     const dir = entry.trim().replace(/^"|"$/g, '')
     if (dir.length === 0) continue
+    // Local drive-absolute paths only: stat-ing a disconnected UNC/PATH entry
+    // can block the host event loop on an SMB timeout during every scan.
+    // charCodeAt avoids a separator regex so the intent is unambiguous.
+    const driveAbsolute = /^[a-zA-Z]:/.test(dir) && (dir.charCodeAt(2) === 47 || dir.charCodeAt(2) === 92)
+    if (!driveAbsolute) continue
     if (isFile(winJoin(dir, 'bash.exe'))) {
       const root = deriveRootFromBash(winJoin(dir, 'bash.exe'))
       if (root !== undefined) roots.push(root)
@@ -509,7 +552,10 @@ export function discoverBash(options: {
 
 /** Cached scanner: one full pass at startup, refreshed by the settings button. */
 export interface DiscoveryCache {
+  /** Run (or reuse) a full scan. Callers that must not block use {@link peek}. */
   get(): DiscoverResult
+  /** The last completed scan, or undefined before one finished; never spawns. */
+  peek(): DiscoverResult | undefined
   refresh(options?: { savedPath?: string; msystem?: MsystemSetting; probe?: boolean }): DiscoverResult
 }
 
@@ -519,6 +565,9 @@ export function createDiscoveryCache(initial?: DiscoverResult): DiscoveryCache {
   return {
     get() {
       current ??= discoverBash({ full: true })
+      return current
+    },
+    peek() {
       return current
     },
     refresh(options = {}) {

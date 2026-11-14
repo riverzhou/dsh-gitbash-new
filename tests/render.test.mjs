@@ -79,9 +79,10 @@ test('a promoted result keeps the compat note before the marker', () => {
   )
 })
 
-test('a null exit code does not render an invalid exit marker', () => {
+test('a null exit code renders the official null marker the Web card understands', () => {
   const text = renderResult({ ...base, exitCode: null, signal: null })
-  assert.equal(text, '(no output)\n[exit status unavailable]')
-  assert.equal(text.includes('[exit code: null]'), false)
-  assert.equal(parseExitStatus(text).unavailable, true)
+  assert.equal(text, '(no output)\n[exit code: null]')
+  assert.equal(parseExitStatus(text).exitCode, null)
+  // Replay of pre-0.2.7 results keeps working.
+  assert.equal(parseExitStatus('(no output)\n[exit status unavailable]').exitCode, null)
 })

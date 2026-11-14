@@ -17,7 +17,10 @@ export function diagFile(): string {
 /** Append one line; diagnostics must never break the caller. */
 export function diag(message: string): void {
   try {
-    appendFileSync(diagFile(), `${new Date().toISOString()} ${message}\n`, 'utf8')
+    // Free text from providers/errors can contain newlines; one event must stay
+    // one line so a foreign message cannot forge diagnostic entries.
+    const line = message.replace(/[\r\n]+/g, ' ')
+    appendFileSync(diagFile(), `${new Date().toISOString()} ${line}\n`, 'utf8')
   } catch {
     // Diagnostics are best-effort.
   }

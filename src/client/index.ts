@@ -8,7 +8,7 @@
 import { createElement } from 'react'
 import { dictionaries, LOCALE_NS } from './locales.ts'
 import { TerminalToolRow } from './row.tsx'
-import { SETTINGS_NAMESPACE } from '../shared/protocol.ts'
+import { SETTINGS_NAMESPACE, stripMatchingQuotes } from '../shared/protocol.ts'
 import type { RowConfig } from './store.ts'
 import type {
   ConfigFormsLike,
@@ -32,7 +32,7 @@ export function decodeConfig(section: unknown): RowConfig | undefined {
   if (typeof section !== 'object' || section === null || Array.isArray(section)) return undefined
   const record = section as Record<string, unknown>
   return {
-    bashPath: typeof record.bashPath === 'string' ? record.bashPath : '',
+    bashPath: typeof record.bashPath === 'string' ? stripMatchingQuotes(record.bashPath) : '',
     msystem: (typeof record.msystem === 'string' ? record.msystem : 'auto') as RowConfig['msystem'],
     compat: (typeof record.compat === 'string' ? record.compat : 'auto') as RowConfig['compat'],
   }
@@ -94,8 +94,8 @@ export function apply(ctx: PluginClientContextLike): void {
     return candidate !== undefined && candidate !== null && typeof candidate.bind === 'function' ? candidate : undefined
   }
 
-  const nativeForm = (): SettingsScopeLike<RowConfig> | undefined => {
-    const forms = readService<ConfigFormsLike>(ctx, 'configForms')
+  const nativeForm = (scopeCtx: PluginClientContextLike = ctx): SettingsScopeLike<RowConfig> | undefined => {
+    const forms = readService<ConfigFormsLike>(scopeCtx, 'configForms')
     if (forms === undefined || forms === null || typeof forms.get !== 'function') return undefined
     try {
       return forms.get<RowConfig>(SETTINGS_NAMESPACE)
@@ -114,10 +114,19 @@ export function apply(ctx: PluginClientContextLike): void {
 
   let seated = false
   let seatDispose: (() => void) | undefined
+  let seatedScope: SettingsScopeLike<RowConfig> | undefined
   const noop = (): void => {}
   /** Seat the row and return the disposer that unregisters it. */
   const seatRow = (scope: SettingsScopeLike<RowConfig> | undefined): (() => void) => {
-    if (seated) return seatDispose ?? noop
+    if (seated && seatedScope === scope) return seatDispose ?? noop
+    if (seated) {
+      // A provider replacement hands us a new scope; release the old row first.
+      const previous = seatDispose
+      seatDispose = undefined
+      seated = false
+      seatedScope = undefined
+      previous?.()
+    }
     seated = true
     let inner: (() => void) | undefined
     const release = (): void => {
@@ -129,6 +138,7 @@ export function apply(ctx: PluginClientContextLike): void {
       if (seatDispose === release) {
         seatDispose = undefined
         seated = false
+        seatedScope = undefined
       }
     }
     try {
@@ -138,11 +148,15 @@ export function apply(ctx: PluginClientContextLike): void {
       ))
       if (typeof dispose === 'function') inner = dispose as () => void
       seatDispose = release
+      seatedScope = scope
       return release
-    } catch {
+    } catch (error) {
       // A duplicate slot id after an HMR re-apply is not fatal; leave the row
-      // unseated instead of letting the client plugin throw.
+      // unseated instead of letting the client plugin throw, but leave a trace
+      // so a stale registration is diagnosable.
+      console.warn('[dsh-gitbash] settings row registration failed:', error)
       seated = false
+      seatedScope = undefined
       return noop
     }
   }
@@ -158,6 +172,77 @@ export function apply(ctx: PluginClientContextLike): void {
     }
   }
 
+  /**
+   * Watch the namespace through the official lifecycle API. The row exists only
+   * while the Host serves the namespace: it is disposed when the settings
+   * provider goes away and re-seated when the namespace comes back, instead of
+   * keeping a form whose writes can only fail. Re-installing disposes the
+   * previous watch, which covers a configForms service replacement/HMR.
+   */
+  let stopWatch: (() => void) | undefined
+  const installWatch = (forms: ConfigFormsLike, scopeCtx: PluginClientContextLike): boolean => {
+    if (typeof forms.whileServed !== 'function') return false
+    const previous = stopWatch
+    stopWatch = undefined
+    try {
+      previous?.()
+    } catch {
+      // A dead provider disposer must not take the page down; keep going.
+    }
+    let releaseWatch: () => void
+    try {
+      const whileServed = forms.whileServed.bind(forms)
+      releaseWatch = asDisposer(whileServed([SETTINGS_NAMESPACE], () => {
+        const servedScope = nativeForm(scopeCtx)
+        return servedScope === undefined ? noop : seatRow(servedScope)
+      }))
+    } catch (error) {
+      console.warn('[dsh-gitbash] settings namespace watch failed:', error)
+      return false
+    }
+    let stopped = false
+    const stop = (): void => {
+      if (stopped) return
+      stopped = true
+      if (stopWatch === stop) stopWatch = undefined
+      releaseWatch()
+    }
+    stopWatch = stop
+    if (typeof scopeCtx.effect === 'function') {
+      try {
+        scopeCtx.effect(() => stop, 'dsh-gitbash: settings row watch')
+      } catch {
+        // The watch is live; context teardown may still release it.
+      }
+    }
+    return true
+  }
+
+  // Primary path: the official configForms service exists, so let it decide
+  // when the namespace is actually served.
+  const forms = readService<ConfigFormsLike>(ctx, 'configForms')
+  if (forms !== undefined && installWatch(forms, ctx)) {
+    // The service implementation can be replaced (HMR / profile reload) without
+    // re-applying this plugin. Re-watch on a new implementation uid so a row
+    // never keeps a disposed form. The callback receives its own scope; use it
+    // so the watch is disposed when that provider unloads.
+    if (typeof ctx.inject === 'function') {
+      try {
+        ctx.inject(['configForms'], (scope) => {
+          const target = scope ?? ctx
+          const next = readService<ConfigFormsLike>(target, 'configForms')
+          if (next !== undefined && typeof next.whileServed === 'function' && installWatch(next, target)) return
+          const lateScope = nativeForm(target)
+          if (lateScope !== undefined) seat(lateScope)
+        })
+      } catch {
+        // Replacement watching is optional; the initial watch still works.
+      }
+    }
+    return
+  }
+
+  // Compatibility path for hosts without whileServed (or without configForms).
   const family = binder()
   if (family !== undefined) {
     const scoped = bind(family) ?? nativeForm()
@@ -186,31 +271,21 @@ export function apply(ctx: PluginClientContextLike): void {
       // Late activation is optional; the native form path still works.
     }
     try {
-      ctx.inject(['configForms'], () => {
-        if (seated) return
-        const late = nativeForm()
-        if (late !== undefined) {
-          seat(late)
-          return
-        }
-        const forms = readService<ConfigFormsLike>(ctx, 'configForms')
-        if (typeof forms?.whileServed === 'function') {
-          const whileServed = forms.whileServed.bind(forms)
-          const startWatch = (): (() => void) => whileServed([SETTINGS_NAMESPACE], () => {
-            if (seated) return noop
-            const servedScope = nativeForm()
-            return servedScope !== undefined ? seatRow(servedScope) : noop
-          })
-          try {
-            if (typeof ctx.effect === 'function') ctx.effect(startWatch, 'dsh-gitbash: settings row watch')
-            else startWatch()
-          } catch {
-            // Leave the row unseated; the user can reload once the settings domain is up.
-          }
-        }
+      ctx.inject(['configForms'], (scope) => {
+        const target = scope ?? ctx
+        const late = readService<ConfigFormsLike>(target, 'configForms')
+        if (late !== undefined && installWatch(late, target)) return
+        const lateScope = nativeForm(target)
+        if (lateScope !== undefined) seat(lateScope)
       })
     } catch {
       // Late activation is optional; the row stays unseated rather than breaking the client plugin.
     }
   }
 }
+
+/**
+ * Internal controller exports for the Node-side client tests. The Host never
+ * consumes these; the browser bundle publishes them alongside `apply`.
+ */
+export { createRowController, NOTICE_VERSION_OK, NOTICE_VERSION_OK_UNSAVED } from './store.ts'

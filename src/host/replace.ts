@@ -4,8 +4,10 @@
  *
  * `agent/created` is serial and awaited by the agent runtime, so the tool and
  * prompt are installed before the first model request. Every action is scoped
- * to `agent.ctx`; child agents inherit the result and are skipped by the
- * `restrict({ deny: ['pwsh'] })` failure path.
+ * to `agent.ctx`; a child agent inherits the parent layer and also runs this
+ * listener in its own scope (the parent restriction makes `pwsh` unknown or
+ * already denied, so the child either re-registers harmlessly or keeps the
+ * inherited replacement).
  */
 import type { TerminalToolSettings } from './types.ts'
 import type { BashProfile, DiscoveryCache } from './discover.ts'
@@ -155,27 +157,35 @@ export function replaceTerminalTool(
     return { applied: false, reason: `pwsh is not restrictable here (already hidden?): ${messageOf(error)}` }
   }
 
-  const releases: (() => void)[] = [releaseRestriction]
+  const releases: (() => void)[] = [once(releaseRestriction)]
   try {
     const tool = createBashTool(runtime)
-    releases.push(capability.tools.register(tool))
+    releases.push(once(capability.tools.register(tool)))
     const orderPwsh = sectionOrder(capability.systemPrompt, 'TOOL_PWSH', ORDER_TOOL_PWSH)
     const orderBash = sectionOrder(capability.systemPrompt, 'TOOL_BASH', ORDER_TOOL_BASH)
-    releases.push(capability.systemPrompt.section({ name: 'tool:pwsh', order: orderPwsh, text: '' }))
-    releases.push(capability.systemPrompt.section({ name: 'tool:bash', order: orderBash, text: TOOL_BASH_TEXT }))
+    releases.push(once(capability.systemPrompt.section({ name: 'tool:pwsh', order: orderPwsh, text: '' })))
+    releases.push(once(capability.systemPrompt.section({ name: 'tool:bash', order: orderBash, text: TOOL_BASH_TEXT })))
     const windowsText = settings.compat === 'auto'
       ? 'bash on Windows runs outside the DSH file sandbox when the session mode is workspace-write, because the MSYS2 runtime cannot start under the Windows restricted token. Do not write outside the workspace; treat outside paths as read-only unless the user explicitly asks otherwise.'
       : 'Bash is available only under danger-full-access in this deployment; under read-only/workspace-write the bash tool refuses instead of widening permissions.'
-    releases.push(capability.systemPrompt.section({
+    releases.push(once(capability.systemPrompt.section({
       name: 'tool:bash:windows',
       order: orderBash + 1,
       text: windowsText,
-    }))
+    })))
     for (const release of releases) {
+      // The agent scope owns the normal lifetime; the plugin effect also
+      // releases it when this plugin is disabled/replaced at runtime, so a
+      // live agent cannot keep an unconfined bash after unload.
       try {
         agentCtx.effect?.(() => release, 'dsh-gitbash: replacement')
       } catch {
-        // The registrations are already live; scope disposal still frees them.
+        // The registration is live; plugin-scope cleanup still frees it.
+      }
+      try {
+        host.effect?.(() => release, 'dsh-gitbash: replacement (plugin scope)')
+      } catch {
+        // The registration is live; agent-scope cleanup still frees it.
       }
     }
     diag(`replace: applied agent=${agent.id} profile=${profile.id} compat=${settings.compat}`)
@@ -244,6 +254,20 @@ export function registerReplacement(options: ReplaceListenerOptions): () => void
   }
   const dispose = options.host.on('agent/created', listener)
   return typeof dispose === 'function' ? dispose as () => void : () => undefined
+}
+
+/** Make one release idempotent across the agent and plugin scopes. */
+function once(release: () => void): () => void {
+  let done = false
+  return () => {
+    if (done) return
+    done = true
+    try {
+      release()
+    } catch {
+      // A partially torn-down layer must not block the remaining releases.
+    }
+  }
 }
 
 /** One-line error text. */

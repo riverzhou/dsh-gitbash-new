@@ -16,8 +16,13 @@ import type {
 
 /** A spawn failure that is not a normal command exit. */
 export class BashSpawnError extends Error {
-  constructor(message: string) {
-    super(message)
+  /**
+   * @param message - friendly Windows-facing diagnosis.
+   * @param options - the provider's original error as `cause`, kept for logs
+   *   and tests (the message already includes the platform detail).
+   */
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options)
     this.name = 'BashSpawnError'
   }
 }
@@ -159,7 +164,7 @@ export function createBashExecution(
       env: request.env,
     })
   } catch (error) {
-    throw new BashSpawnError(spawnMessage(profile, error))
+    throw new BashSpawnError(spawnMessage(profile, error), { cause: error })
   }
 
   let status: 'running' | 'completed' | 'killed' = 'running'
@@ -272,7 +277,7 @@ export function createBashExecution(
     async result(): Promise<ForegroundValue> {
       await done
       if (providerError !== undefined) {
-        throw new BashSpawnError(providerMessage(profile, providerError))
+        throw new BashSpawnError(providerMessage(profile, providerError), { cause: providerError })
       }
       const out = collect(stdout)
       let err = collect(stderr)

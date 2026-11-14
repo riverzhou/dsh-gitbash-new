@@ -3,6 +3,114 @@
 All notable changes to this project are documented here. One version per
 entry; the Git history is the evidence.
 
+## 0.2.8 — 2026-11-14
+
+Full audit release. Three independent read-only audits (host contracts,
+client/UI, tests/docs/packaging) were run against the 0.2.7 tree; every
+confirmed finding was fixed and covered by a regression test where possible.
+Highlights:
+
+### Security and correctness
+
+- **Discovery no longer executes bare system tool names.** `where.exe` and
+  `reg.exe` now run from `<SystemRoot>\System32` with a minimal Windows
+  environment (no DSH/API credentials). Previously a model-writable `where.exe`
+  or `reg.exe` in the host cwd could win the Windows search order and receive
+  the DSH process environment on plugin load or Settings → Refresh.
+- **Discovery cannot block on network PATH entries.** Only drive-absolute PATH
+  entries are probed; `/state` uses `DiscoveryCache.peek()` and never starts a
+  cold synchronous scan inside a request. `/discover` remains the explicit
+  user-triggered full scan.
+- **Official null exit status.** A settled foreground call without an exit code
+  now emits `[exit code: null]`, the marker the rc.3 Web terminal card parses
+  as its "no exit code" pill. `[exit status unavailable]` is still consumed on
+  replay of older sessions, but the presenter no longer sends a fake exit code.
+- **`sandbox_permissions` enum is validated** when advertised, producing the
+  official `"sandbox_permissions" must be one of [...]` ToolArgsError instead
+  of a later escalation error. Strict compatibility refuses a workspace-write
+  grant **before** any approval prompt (the grant can never be honored).
+- **`BashSpawnError` keeps the provider error as `cause`**; `stopJob` uses the
+  correct reason for preparation timeouts; a failed consuming job read is
+  reported instead of fabricating an empty promoted result; read-only/strict
+  refusals no longer advertise escalation a composition does not have.
+- **Diagnostics stay one line per event**; provider/error text with CR/LF can
+  no longer forge entries in `%TEMP%\dsh-gitbash.log`.
+
+### Lifecycle
+
+- **Plugin unload clears the replacement.** Tool/prompt registrations are
+  released from both the agent scope and the plugin context through an
+  idempotent `once()`; disabling or live-updating the plugin no longer leaves
+  an unconfined `bash` in existing agents.
+- **The settings row really follows `configForms.whileServed`.** The primary
+  path registers through the namespace lifecycle, disposes the row when the
+  namespace disappears, and re-seats it when it returns. The previous code
+  seated from `configForms.get()` first, so the `whileServed` branch was dead.
+- **Client request sequencing.** A stale `/state`, `/validate`, or `/discover`
+  response can no longer overwrite a newer one. A save invalidates an in-flight
+  Test and clears its spinner; a failed passive refresh keeps a save/test error
+  instead of replacing it with a network message; a new `problem` clears a stale
+  success notice; overlapping saves keep `saving` true until the last one
+  settles.
+- **configForms replacement is re-watched.** The row now installs
+  `whileServed` through a scoped `configForms` injection, tracks the watch
+  disposer, and re-watches a replaced provider; `seatRow` compares the scope
+  so a provider reload releases the old row instead of keeping a disposed form.
+  (Namespace withdrawal/re-add was already covered.)
+- **Safer API client**: requires `ok: true`, rejects malformed 200 bodies,
+  reports the HTTP status on empty bodies, bounds ordinary requests with
+  `AbortSignal.timeout(20s)`, and gives the synchronous full `/discover` scan
+  60s.
+- **Settings row UX**: controls are disabled while the namespace is not served
+  or while loading (with an accurate message), labels are associated for screen
+  readers, status and errors are announced, the warning text uses the host error
+  color, long values wrap instead of overflowing, and Test validates the draft
+  path with the same `msystem: auto` normalization Apply uses, without dropping
+  the saved effective profile on a draft failure. Path and environment controls
+  are locked during an in-flight Test. A Test of the auto/effective path is
+  reported as the saved profile, not as an unsaved draft. Malformed
+  `lastReplace` / `shellSandboxMode` / optional strings are rejected before
+  React can render them.
+- **Quote normalization** is shared between decode and the manual-path write, so
+  a pasted quoted path no longer silently resets the selected MSYS2 environment.
+
+### Packaging and release
+
+- Version **0.2.8**; `publishConfig.access = "public"`; removed the broken
+  `types` entries (they pointed at `.ts` sources that require
+  `allowImportingTsExtensions` and client-only `react`, and no `.d.ts` was
+  shipped). Manifest tests now pin the version and required `files`.
+- `compatcheck --require` makes a missing `app.asar` a release failure instead
+  of a silent skip.
+- The integration subprocess adapter now models the provider's scrubbed-parent
+  env merge/tombstones and tree kill, so the `PWD` tombstone and timeout tests
+  are meaningful; the MSYS2 gcc test marks a skip instead of passing empty.
+
+### Tests and docs
+
+- **136 tests** (up from 111), including the new `tests/regression-0.2.8.test.mjs`
+  and Node-side client lifecycle/store tests; `pnpm selftest` is async-aware and
+  has 13 checks.
+- Fresh DSH `0.2.2-rc.3` light/dark settings-row screenshots
+  (`docs/images/settings-row-0.2.8-light.png`, `-dark.png`); README/README.zh
+  fact-checked (minimum DSH, rc.3 scope, test counts, screenshot provenance).
+- AGENTS §6.1/§6.34 corrected for the non-existent child-agent skip and the
+  fact that DSH records only plugin error messages (not `error.info`).
+- DESIGN: sandboxPolicy is mandatory for replacement, verification wording no
+  longer claims tests avoid `lib/`, and the module/verification tables were
+  brought in line with the tree.
+
+### Not covered
+
+- npm provenance/attestation requires a CI identity; this release is published
+  from the local authenticated npm session (no attestation).
+- Real-machine HMR/namespace-withdrawal, Windows high-contrast mode, and a
+  fresh native-open drop-down capture (the existing dark/light open-list
+  captures are from 0.2.1; the tokens are unchanged and the closed controls are
+  re-captured in 0.2.8).
+- Git-profile/subagent/read-only/approval live runs on rc.3 were not repeated;
+  the rc.1 evidence and the unit/integration suites cover them.
+
 ## 0.2.7 — 2026-11-14
 
 DSH 0.2.2-rc.3 sync release. The plugin now mirrors the rc.3 shell error

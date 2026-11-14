@@ -15,8 +15,8 @@
 | 文件 | 插件源码 + 构建产物 `lib/` + 文档/测试/脚本（见 §3） |
 | 源码 / 技术栈 | TypeScript（host ESM + client bundle）+ esbuild；`lib/` 已构建并入库 |
 | 项目定位 | ✅ **已确定并实现**（见 §1；设计见 `docs/DESIGN.md`） |
-| 版本 / 许可 | `0.2.7` / `GPL-3.0-only` |
-| 验证 | `pnpm test` 111/111；`pnpm selftest` 10/10；`pnpm compatcheck` 通过（运行时 `0.2.2-rc.3`，floor `>=0.2.2-rc.3`，12 组部署产物）；DSH 0.2.2-rc.3 真机：settings route + 40 工具目录（仅 bash，无 pwsh）+ MSYS2 bash/compat + 后台 + promote + `invalid arguments:` 错误文本；历史证据（`docs/SMOKE.md`）：rc.1 的 31/31 场景 + 15/15 设置行 UI + 13/13 手动路径 UI + 0.2.6 read-only/审批/大输出/job kill/恶意环境清除；strict 拒绝实测 |
+| 版本 / 许可 | `0.2.8` / `GPL-3.0-only` |
+| 验证 | `pnpm test` 136/136；`pnpm selftest` 13/13；`pnpm compatcheck --require` 通过（运行时 `0.2.2-rc.3`，floor `>=0.2.2-rc.3`，12 组部署产物）；DSH 0.2.2-rc.3 真机：settings route + 真实 light/dark 设置行 + 40 工具目录（仅 bash，无 pwsh）+ MSYS2 bash/compat + 后台 + promote + `invalid arguments:` 错误文本；历史证据（`docs/SMOKE.md`）：rc.1 的 31/31 场景 + 15/15 设置行 UI + 13/13 手动路径 UI + 0.2.6 read-only/审批/大输出/job kill/恶意环境清除；strict 拒绝实测 |
 | 平台 | Windows 10（19045）/ Git for Windows 2.56（bash 5.3.15）/ MSYS2 5.3.20（UCRT64） |
 | 运行时 | Node v24.21.0；DSH 桌面运行时 `0.2.2-rc.3` |
 | 已知硬约束 | Git Bash/MSYS2 无法在 DSH Windows ACL 沙箱内启动；兼容模式策略见 §1 与 README |
@@ -117,7 +117,7 @@ dsh-gitbash-new/
 │       └── types.ts       # 客户端契约窄化
 ├── tests/
 │   ├── helpers/           # fake / real subprocess
-│   └── *.test.mjs         # 111 个 node:test 用例（含真实 Git/MSYS2 集成）
+│   └── *.test.mjs         # 136 个 node:test 用例（含真实 Git/MSYS2 集成与 client 生命周期）
 ├── scripts/
 │   ├── selftest.mjs       # 纯逻辑自测
 │   └── compatcheck.mjs    # 对 app.asar 里的官方产物做契约字符串核对
@@ -159,10 +159,19 @@ dsh-gitbash-new/
 
 每次提交前：
 
-- [ ] `pnpm check`、`pnpm test`、`pnpm selftest`、`pnpm compatcheck` 全过（无 DSH 安装时 compatcheck 可 skip，但要说明）。
+- [ ] `pnpm check`、`pnpm test`、`pnpm selftest`、`node scripts/compatcheck.mjs --require` 全过（无 DSH 安装时 compatcheck 会失败，说明后改用 skip 并记录）。
 - [ ] `git status` / `git show --stat` 逐行核对；`lib/` 与 `src/` 同步。
 - [ ] 文档（README.md / README.zh.md / CHANGELOG/DESIGN/AGENTS 按影响面）与代码同提交；两份 README 同步。
 - [ ] 提交信息用 `-F`，写清「改了什么 / 为什么 / 影响面 / 未完成」。
+
+发布（tag / GitHub / npm）：
+
+- [ ] 工作区干净；`package.json` 版本、`tests/manifest.test.mjs` 版本、README/CHANGELOG 版本一致。
+- [ ] `pnpm build` 后 `lib/` 与 `src/` 同提交；`npm pack --dry-run` 检查文件清单。
+- [ ] 用一个临时 profile 安装 **pack 后的 tarball**（不是 link）跑一次 `/state` + 真实 bash。
+- [ ] 提交 → `git tag -a vX.Y.Z -F <说明文件>` → push `master` + tag。
+- [ ] `npm publish`（scoped public）；随后 `npm view @riverzh/dsh-gitbash@X.Y.Z version` 与从 npm 安装复验。
+- [ ] 本地 npm 发布没有 provenance/attestation；要 attestation 必须在 CI（OIDC）里发布，发布后不能补。
 
 ---
 
@@ -171,7 +180,9 @@ dsh-gitbash-new/
 1. **替换挂载点**：`agent/created`（serial + awaited）。在 `agent.ctx` 里
    `tools.restrict({ deny: ['pwsh'] })` → `tools.register(bashTool)` →
    `systemPrompt.section({ name:'tool:pwsh', text:'' })` → `tool:bash` / `tool:bash:windows`。
-   事件名写错不会报错、只是不触发。
+   事件名写错不会报错、只是不触发。子代理在自己的 scope 里也会跑一遍监听器：
+   父层已继承 bash/prompt，子代理要么无害地再注册一层，要么沿用继承结果；
+   **不要**依赖「restrict 失败跳过子代理」这种不存在的保证。
 2. **工具 schema**：`parameters` 与 `output.schema` 都是**标准 JSON Schema**
    （`required` 是对象节点上的数组）。不能用 `defineTool` 的叶子 `required: true` DSL——
    真机曾报 `Invalid schema for function 'bash'`。
@@ -267,17 +278,20 @@ dsh-gitbash-new/
     之后的 provider 错误，`processOutcome` 必须映射为 `failed`；presenter 还要
     从 `value.kind`、promote 标记文本（允许 DSH spill footer 跟随）与 background
     确认文本兜底。
-34. **0.2.2-rc.3 的错误身份（0.2.7 同步）**：rc.3 把 shell 失败改成 HarnessError
-    子类并在 `tool/result` 记录 `error.name/code`：参数违规是 `ToolArgsError`
-    （`INVALID_ARGS`，消息前缀 `invalid arguments: `；校验消息为
+34. **0.2.2-rc.3 的错误身份（0.2.7 同步，0.2.8 校正）**：rc.3 把 shell 失败改成
+    HarnessError 子类并在 `tool/result` 记录 `error.name/code`：参数违规是
+    `ToolArgsError`（`INVALID_ARGS`，消息前缀 `invalid arguments: `；校验消息为
     `missing required property "<key>"` / `"<key>" must be a string|number|boolean`），
     缺 job runtime 是 `ToolContextUnavailableError`（`TOOL_CONTEXT_UNAVAILABLE`），
-    禁用后台是 `JobError`（`JOB_BACKGROUND_DISABLED`），升权失败是
-    `SandboxEscalationError`（`SANDBOX_ESCALATION_*`），spawn 失败是
-    `SubprocessError`（`SUBPROCESS_SPAWN_*`）。第三方插件无法 import
+    升权失败是 `SandboxEscalationError`（`SANDBOX_ESCALATION_*`），spawn 失败是
+    官方 `SubprocessError`（`SUBPROCESS_SPAWN_*`；本插件保留更可操作的
+    `BashSpawnError` 文案并带 `cause`）。第三方插件无法 import
     `@deepseek-ai/dsh-error`，`error instanceof HarnessError` 不成立，因此
-    `error.info` 不会被记录；`src/host/errors.ts` 只复刻**可见身份**（消息 +
-    `name` + `code`）。这些字符串属于 model experience，不得随意改写；
+    DSH **只记录 message，不记录 `error.info`**；`src/host/errors.ts` 镜像的
+    `name`/`code` 只用于诊断、单测和未来兼容，不是 `tool/result` 的可见字段。
+    本插件没有 `enableRunInBackground` 配置，因此不会产生官方的
+    `JOB_BACKGROUND_DISABLED`。这些字符串属于 model experience，不得随意改写；
+    `sandbox_permissions` 的 enum 必须自己校验（官方 defineTool 才校验）；
     tool-bash 的参数 `required` 顺序是 `["description","command"]`。
 35. **0.2.2-rc.3 的失败保真（0.2.7）**：`processJob` 必须保存 prepare 阶段的
     原始 error 并暴露 `failure()`；前台 job 在进程未发布时 rethrow 原 error，
@@ -286,3 +300,32 @@ dsh-gitbash-new/
     `SHELL_ENV_CONTRIBUTION_INVALID`），不得吞掉后退回旧 cwd/空 env。
     `cancelled` 审批在 signal 已 abort 时先 `throwIfAborted()`，让 registry 记为
     abort 而不是 sandbox error。
+36. **系统工具不能按裸名执行（0.2.8）**：`where.exe` / `reg.exe` 必须用
+    `<SystemRoot>\System32\...` 绝对路径，并只带最小环境（SystemRoot/
+    SystemDrive/WINDIR/PATH/PATHEXT/TEMP/TMP），不能继承 DSH 的
+    `DEEPSEEK_API_KEY` 等凭据。Windows 搜索顺序可能优先 cwd（工作区可写），
+    裸名会让模型写出的同名 exe 在刷新/装载时执行。PATH 扫描只 stat
+    drive-absolute 条目，避免断开的 UNC/SMB 路径卡住 host 事件循环。
+    `/state` 用 `DiscoveryCache.peek()`，绝不在请求里冷扫描；`/discover` 仍是
+    用户触发的同步全量扫描（已知性能代价）。
+37. **null exit 标记（0.2.8）**：前台结果没有 exit code 时必须输出
+    `[exit code: null]`（最后一行）。DSH rc.3 的 Web 终端卡片只解析
+    `[killed by signal: X]` 与 `[exit code: N|null]`；旧 `[exit status unavailable]`
+    会让卡片显示假的 exit 0。`parseExitStatus` 保留旧标记作为 replay 兼容，
+    但 presenter 对 null 不传 `exitCode`。
+38. **插件卸载要撤掉替换（0.2.8）**：`tools.register/restrict` 与 prompt section
+    的 disposer 同时登记在 `agent.ctx` 和 plugin host ctx（用 `once()` 包一层，
+    双 scope 释放安全）。否则 live profile 禁用/升级插件后，已存在的 agent
+    仍保留可执行的无沙箱 `bash`。
+39. **客户端生命周期与请求竞态（0.2.8）**：设置行主路径必须走
+    `configForms.whileServed([namespace], register)`：namespace 消失时释放
+    slot、回来时重新 seat，不能只 `get()` 后立刻注册。`configForms` 可能被
+    HMR/profile reload 替换：通过 scoped `ctx.inject` 重装 watch，`seatRow`
+    比较 scope，旧 row 必须先释放；不要用布尔 latch 阻止重装。`store` 用单调
+    request token 丢弃过期 `/state`、`/validate`、`/discover` 响应；保存要使
+    在途 Test 失效；`errorOwner` 防止被动 `/state` 刷新（成功或失败）清掉
+    保存/测试错误；`problem` 出现时清掉旧成功 notice；`scopeStatus !== 'ready'`
+    时禁用控件。Draft Test 必须用 `msystem: 'auto'`（与 Apply 一致），saved
+    comparison 要大小写/分隔符归一化。`/api` 的 `ok !== true`、空 body、
+    数组/对象形状和可选字符串字段都要报错，不能让 row 崩；`/discover` 用
+    更长的 60s 超时。
