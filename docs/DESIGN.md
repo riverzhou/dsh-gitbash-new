@@ -101,6 +101,7 @@ src/
 │   ├── discover.ts          # Git/MSYS2/Cygwin profile 发现、WSL 排除、环境枚举、校验、版本探测
 │   ├── env.ts               # profile 专属 MSYSTEM/PATH/ENV 覆盖、POSIX↔Windows 路径
 │   ├── escalation.ts        # 官方 escalation 语义的本地窄化实现（逐字）
+│   ├── errors.ts            # 官方错误身份（name/code）的本地镜像
 │   ├── executor.ts          # ctx.subprocess.spawn 封装：deadline、collect、kill、result
 │   ├── jobs.ts              # processSources / processJob / ringDelta / promote
 │   ├── render.ts            # 结果文本、退出码标记、截断、兼容模式提示
